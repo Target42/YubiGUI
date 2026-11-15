@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=YubiGUI
+GenericName=YubiKey-Verwaltung
+Comment=YubiKey über ykman verwalten
+Exec=yubigui
+Terminal=false
+Categories=Utility;Security;
+Keywords=YubiKey;ykman;FIDO;PIV;OATH;
+StartupNotify=true

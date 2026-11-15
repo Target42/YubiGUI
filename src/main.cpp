@@ -257,6 +257,7 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("yubigui"));
     QApplication::setApplicationDisplayName(QStringLiteral("YubiGUI"));
+    QApplication::setApplicationVersion(QStringLiteral(YUBIGUI_VERSION));
     applyAppearance();
 
     MainWindow window;

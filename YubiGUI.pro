@@ -28,6 +28,16 @@ win32-clang-g++: QMAKE_CXXFLAGS += -finput-charset=UTF-8
 TARGET = yubigui
 TEMPLATE = app
 
+# Versionsnummer der Dateiinfo. Die Paketskripte übergeben VERSION.
+isEmpty(VERSION): VERSION = 0.1.0
+DEFINES += YUBIGUI_VERSION=\\\"$$VERSION\\\"
+
+win32 {
+    QMAKE_TARGET_PRODUCT = YubiGUI
+    QMAKE_TARGET_DESCRIPTION = YubiKey-Verwaltung
+    QMAKE_TARGET_COPYRIGHT = Stephan Winter
+}
+
 SOURCES += \
     src/main.cpp \
     src/MainWindow.cpp \

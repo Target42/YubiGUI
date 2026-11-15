@@ -1,0 +1,8 @@
+YubiGUI verwendet Qt 6, lizenziert unter der GNU LGPLv3.
+Der Lizenztext liegt daneben in Qt-LICENSE.txt.
+
+Der Quelltext dieser Qt-Fassung:
+https://download.qt.io/official_releases/qt/6.10/6.10.0/
+
+Die Qt-Bibliotheken sind die DLLs neben yubigui.exe.
+Sie lassen sich durch eine eigene Fassung von Qt 6.10 ersetzen.

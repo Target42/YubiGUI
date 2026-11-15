@@ -1,0 +1,13 @@
+﻿YubiGUI verwaltet einen YubiKey über das Programm ykman.
+
+Dieses Setup bringt die Oberfläche und die Qt-Laufzeit mit.
+ykman 6 kommt von Yubico, im Installer „YubiKey Manager CLI“.
+Die Datei liegt danach üblicherweise hier:
+
+C:\Program Files\Yubico\YubiKey Manager CLI\ykman.exe
+
+Fehlt ykman 6, öffnet sich das Fenster und findet keinen Schlüssel.
+Der Pfad lässt sich in YubiGUI unter „ykman“ setzen.
+
+Qt 6 liegt unter der LGPLv3 bei. Der Text steht nach der
+Installation in Qt-LICENSE.txt, ein kurzer Hinweis in Qt-HINWEIS.txt.
