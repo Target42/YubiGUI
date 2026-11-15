@@ -1,0 +1,9 @@
+build/
+.venv/
+*.pro.user
+*.pro.user.*
+Makefile
+Makefile.*
+object_script.*
+.qmake.stash
+docs/konzept.md
