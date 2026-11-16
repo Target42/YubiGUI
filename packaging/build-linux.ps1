@@ -39,6 +39,7 @@ section: utils
 priority: optional
 maintainer: Stephan Winter <stephan.winter@online.de>
 homepage: https://github.com/Target42/YubiGUI
+license: MIT
 description: |
   Qt-Oberfläche für den YubiKey.
   YubiGUI startet das installierte ykman und zeigt das Ergebnis im Fenster.
@@ -58,6 +59,10 @@ contents:
       mode: 0755
   - src: $desktop
     dst: /usr/share/applications/yubigui.desktop
+    file_info:
+      mode: 0644
+  - src: ../../LICENSE
+    dst: /usr/share/doc/yubigui/LICENSE
     file_info:
       mode: 0644
 "@

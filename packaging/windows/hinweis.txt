@@ -9,5 +9,7 @@ C:\Program Files\Yubico\YubiKey Manager CLI\ykman.exe
 Fehlt ykman 6, öffnet sich das Fenster und findet keinen Schlüssel.
 Der Pfad lässt sich in YubiGUI unter „ykman“ setzen.
 
+YubiGUI selbst steht unter der MIT-Lizenz. Der Text liegt in LICENSE.txt.
+
 Qt 6 liegt unter der LGPLv3 bei. Der Text steht nach der
 Installation in Qt-LICENSE.txt, ein kurzer Hinweis in Qt-HINWEIS.txt.

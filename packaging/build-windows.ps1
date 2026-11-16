@@ -77,6 +77,7 @@ foreach ($rel in $required) {
 $gcc = Get-ChildItem -Path $Stage -Filter 'libgcc*.dll' -File
 if (-not $gcc) { throw 'Die MinGW-Laufzeit (libgcc) fehlt neben yubigui.exe.' }
 
+Copy-Item (Join-Path $Root 'LICENSE') (Join-Path $Stage 'LICENSE.txt')
 Copy-Item (Join-Path $Root 'packaging\windows\hinweis.txt') (Join-Path $Stage 'LIESMICH.txt')
 Copy-Item (Join-Path $Root 'packaging\windows\qt-hinweis.txt') (Join-Path $Stage 'Qt-HINWEIS.txt')
 $qtLicense = 'D:\Qt\Licenses\LICENSE'

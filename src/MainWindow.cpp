@@ -229,6 +229,8 @@ QString fidoPinText(bool ok, const QString &detail)
             return QStringLiteral("Falscher PIN. Noch 1 Versuch.");
         return QStringLiteral("Falscher PIN. Noch %1 Versuche.").arg(count);
     }
+    if (detail.contains(QLatin1String("Wrong PIN"), Qt::CaseInsensitive))
+        return QStringLiteral("Falscher PIN. Ein Fehlversuch verbraucht einen.");
     if (detail.contains(QLatin1String("PIN is blocked"), Qt::CaseInsensitive))
         return QStringLiteral("Der PIN ist gesperrt. Nur ein FIDO-Reset setzt ihn zurück und löscht die Anmeldedaten.");
     if (detail.contains(QLatin1String("re-insert"), Qt::CaseInsensitive))
@@ -428,6 +430,172 @@ QString askFidoVerifyPin(QWidget *parent, const FidoRecord &fido, const QString 
         value = pin->text();
     wipeEdit(pin);
     return value;
+}
+
+struct FidoPrint
+{
+    QString id;
+    QString name;
+};
+
+bool fidoTemplateId(const QString &id)
+{
+    return QRegularExpression(QStringLiteral("^[0-9a-fA-F]+$")).match(id).hasMatch() && id.size() % 2 == 0;
+}
+
+QString fidoPrintNameProblem(const QString &name)
+{
+    if (name.isEmpty())
+        return QStringLiteral("Der Name fehlt.");
+    if (name.startsWith(QLatin1Char('-')))
+        return QStringLiteral("Der Name darf nicht mit einem Strich beginnen.");
+    if (name.contains(QLatin1Char('\n')) || name.contains(QLatin1Char('\r')))
+        return QStringLiteral("Der Name darf keinen Zeilenumbruch enthalten.");
+    if (name.toUtf8().size() > 15)
+        return QStringLiteral("Der Name darf höchstens 15 Bytes lang sein.");
+    return {};
+}
+
+QString askFidoPrintName(QWidget *parent, const QString &title, const QString &current)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(title);
+    dialog.setMinimumWidth(420);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *info = new QLabel(QStringLiteral(
+        "Ein kurzer Name, höchstens 15 Bytes. Zum Beispiel „linker Daumen“."));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *name = new QLineEdit(current);
+    auto *form = new QFormLayout;
+    form->addRow(QStringLiteral("Name"), name);
+    layout->addLayout(form);
+    auto *problem = new QLabel;
+    problem->setWordWrap(true);
+    layout->addWidget(problem);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Weiter"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Abbrechen"));
+    layout->addWidget(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        const QString issue = fidoPrintNameProblem(name->text().trimmed());
+        if (!issue.isEmpty()) {
+            problem->setText(issue);
+            return;
+        }
+        dialog.accept();
+    });
+    QString value;
+    if (dialog.exec() == QDialog::Accepted)
+        value = name->text().trimmed();
+    name->clear();
+    return value;
+}
+
+int askFidoMinLength(QWidget *parent, int current, int ceiling)
+{
+    QDialog dialog(parent);
+    dialog.setWindowTitle(QStringLiteral("Mindestlänge"));
+    dialog.setMinimumWidth(440);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *info = new QLabel(QStringLiteral(
+        "Die Mindestlänge lässt sich nur erhöhen. Kürzer geht nur über einen FIDO-Reset, "
+        "und der löscht die Anmeldedaten."));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *length = new QSpinBox;
+    length->setRange(current + 1, ceiling);
+    length->setValue(qMin(current + 1, ceiling));
+    auto *form = new QFormLayout;
+    form->addRow(QStringLiteral("Neue Mindestlänge"), length);
+    layout->addLayout(form);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Setzen"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Abbrechen"));
+    layout->addWidget(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted)
+        return 0;
+    return length->value();
+}
+
+QList<FidoPrint> parseFidoPrints(const QString &text)
+{
+    QList<FidoPrint> prints;
+    const QRegularExpression lineRe(QStringLiteral("^ID:\\s*([0-9a-fA-F]+)(?:\\s+\\((.*)\\))?$"));
+    for (QString line : text.split(QLatin1Char('\n'))) {
+        line = line.trimmed();
+        const QRegularExpressionMatch match = lineRe.match(line);
+        if (!match.hasMatch() || !fidoTemplateId(match.captured(1)))
+            continue;
+        FidoPrint print;
+        print.id = match.captured(1).toLower();
+        print.name = match.captured(2).trimmed();
+        prints.append(print);
+    }
+    return prints;
+}
+
+QString fidoConfigText(bool ok, FidoConfigAction action, const QString &detail, const QString &output)
+{
+    if (ok) {
+        switch (action) {
+        case FidoConfigAction::ToggleAlwaysUv:
+            if (output.contains(QLatin1String("is off"), Qt::CaseInsensitive))
+                return QStringLiteral("Die Nutzerprüfung ist nicht mehr bei jeder Anmeldung verlangt.");
+            return QStringLiteral("Die Nutzerprüfung ist jetzt bei jeder Anmeldung verlangt.");
+        case FidoConfigAction::SetMinLength:
+            return QStringLiteral("Die Mindestlänge wurde gesetzt. Kürzer geht nur über einen FIDO-Reset.");
+        case FidoConfigAction::ForceChange:
+            return QStringLiteral("Der PIN muss vor der nächsten Nutzung geändert werden.");
+        case FidoConfigAction::FingerprintsAdd:
+            return QStringLiteral("Der Fingerabdruck wurde gespeichert. Die Liste neu öffnen.");
+        case FidoConfigAction::FingerprintsRename:
+            return QStringLiteral("Der Fingerabdruck wurde umbenannt.");
+        case FidoConfigAction::FingerprintsDelete:
+            return QStringLiteral("Der Fingerabdruck wurde gelöscht.");
+        case FidoConfigAction::FingerprintsList:
+            return {};
+        }
+    }
+    const QString text = detail.toLower();
+    if (text.contains(QLatin1String("can not be disabled")))
+        return QStringLiteral("Auf diesem Key lässt sich die dauernde Nutzerprüfung nicht wieder ausschalten.");
+    if (text.contains(QLatin1String("always require uv is not supported")))
+        return QStringLiteral("Dieser Key kann die dauernde Nutzerprüfung nicht.");
+    if (text.contains(QLatin1String("force change pin is not supported")))
+        return QStringLiteral("Dieser Key kann keine erzwungene PIN-Änderung.");
+    if (text.contains(QLatin1String("minimum pin length is not supported"))
+        || text.contains(QLatin1String("set minimum pin length is not supported")))
+        return QStringLiteral("Dieser Key kann die Mindestlänge nicht ändern.");
+    if (text.contains(QLatin1String("authenticator configuration is not supported")))
+        return QStringLiteral("Dieser Key kann die FIDO-Einstellungen nicht ändern.");
+    if (text.contains(QLatin1String("shorter than")))
+        return QStringLiteral("Die Mindestlänge lässt sich nur erhöhen.");
+    if (text.contains(QLatin1String("longer than 8")))
+        return QStringLiteral("Auf diesem Key darf die Mindestlänge höchstens 8 sein, solange PIV an ist.");
+    if (text.contains(QLatin1String("biometrics is not supported")))
+        return QStringLiteral("Dieser Key hat keinen Fingerabdrucksensor.");
+    if (text.contains(QLatin1String("storage full")))
+        return QStringLiteral("Der Speicher für Fingerabdrücke ist voll. Zuerst einen entfernen.");
+    if (text.contains(QLatin1String("inactivity")))
+        return QStringLiteral("Die Aufnahme wurde abgebrochen, weil der Sensor zu lange leer blieb.");
+    if (text.contains(QLatin1String("no fingerprint matching")))
+        return QStringLiteral("Dieser Fingerabdruck ist nicht mehr auf dem Key.");
+    if (text.contains(QLatin1String("change the pin first")) || text.contains(QLatin1String("pin is blocked")))
+        return QStringLiteral("Zuerst den PIN ändern. Bis dahin sind die übrigen FIDO-Aktionen gesperrt.");
+    if (text.contains(QLatin1String("requires having a pin")))
+        return QStringLiteral("Zuerst einen FIDO-PIN setzen.");
+    if (text.contains(QLatin1String("failed to add fingerprint")))
+        return QStringLiteral("Der Fingerabdruck wurde nicht gespeichert.");
+    const QString pin = fidoPinText(false, detail);
+    if (pin != detail)
+        return pin;
+    if (detail.trimmed().isEmpty())
+        return QStringLiteral("Die FIDO-Einstellung wurde nicht geändert.");
+    return detail.trimmed();
 }
 
 QStringList parseCsvFields(const QString &line)
@@ -1449,6 +1617,17 @@ MainWindow::MainWindow(QWidget *parent)
     m_fidoForm->addRow(QStringLiteral("Fingerabdrücke"), m_fidoFingerprints);
     m_changeFidoPin = new QPushButton(QStringLiteral("PIN ändern"));
     m_changeFidoPin->setEnabled(false);
+    m_fidoMinLength = new QPushButton(QStringLiteral("Mindestlänge"));
+    m_fidoMinLength->setEnabled(false);
+    m_fidoMinLength->setToolTip(QStringLiteral(
+        "Nur erhöhen. Kürzer geht nur über einen FIDO-Reset, und der löscht die Anmeldedaten."));
+    m_fidoForcePin = new QPushButton(QStringLiteral("PIN erzwingen"));
+    m_fidoForcePin->setEnabled(false);
+    m_fidoForcePin->setToolTip(QStringLiteral(
+        "Der PIN gilt danach als gesperrt, bis er geändert wird."));
+    m_fidoAlwaysUv = new QPushButton(QStringLiteral("Prüfung umschalten"));
+    m_fidoAlwaysUv->setEnabled(false);
+    m_fidoAlwaysUv->hide();
     m_resetFido = new QPushButton(QStringLiteral("FIDO zurücksetzen"));
     m_resetFido->setObjectName(QStringLiteral("danger"));
     m_resetFido->setEnabled(false);
@@ -1476,10 +1655,48 @@ MainWindow::MainWindow(QWidget *parent)
     auto *fidoButtons = new QHBoxLayout;
     fidoButtons->setSpacing(8);
     fidoButtons->addWidget(m_changeFidoPin);
-    fidoButtons->addWidget(m_fidoList);
-    fidoButtons->addWidget(m_sshGenerate);
-    fidoButtons->addWidget(m_sshDownload);
+    fidoButtons->addWidget(m_fidoMinLength);
+    fidoButtons->addWidget(m_fidoForcePin);
+    fidoButtons->addWidget(m_fidoAlwaysUv);
     fidoButtons->addStretch(1);
+    m_fidoPrints = new QTableWidget(0, 2);
+    m_fidoPrints->setHorizontalHeaderLabels({QStringLiteral("Name"), QStringLiteral("Kennung")});
+    prepareTable(m_fidoPrints);
+    m_fidoPrints->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_fidoPrints->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_fidoPrints->setFocusPolicy(Qt::StrongFocus);
+    m_fidoPrints->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_fidoPrints->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_fidoPrintList = new QPushButton(QStringLiteral("Liste"));
+    m_fidoPrintList->setEnabled(false);
+    m_fidoPrintAdd = new QPushButton(QStringLiteral("Hinzufügen"));
+    m_fidoPrintAdd->setEnabled(false);
+    m_fidoPrintRename = new QPushButton(QStringLiteral("Umbenennen"));
+    m_fidoPrintRename->setEnabled(false);
+    m_fidoPrintDelete = new QPushButton(QStringLiteral("Löschen"));
+    m_fidoPrintDelete->setObjectName(QStringLiteral("danger"));
+    m_fidoPrintDelete->setEnabled(false);
+    auto *printButtons = new QHBoxLayout;
+    printButtons->setSpacing(8);
+    printButtons->addWidget(m_fidoPrintList);
+    printButtons->addWidget(m_fidoPrintAdd);
+    printButtons->addWidget(m_fidoPrintRename);
+    printButtons->addWidget(m_fidoPrintDelete);
+    printButtons->addStretch(1);
+    m_fidoPrintWrap = new QWidget;
+    auto *printLayout = new QVBoxLayout(m_fidoPrintWrap);
+    printLayout->setContentsMargins(0, 0, 0, 0);
+    printLayout->setSpacing(8);
+    printLayout->addWidget(section(QStringLiteral("Gespeicherte Fingerabdrücke")));
+    printLayout->addWidget(m_fidoPrints, 1);
+    printLayout->addLayout(printButtons);
+    m_fidoPrintWrap->hide();
+    auto *fidoUse = new QHBoxLayout;
+    fidoUse->setSpacing(8);
+    fidoUse->addWidget(m_fidoList);
+    fidoUse->addWidget(m_sshGenerate);
+    fidoUse->addWidget(m_sshDownload);
+    fidoUse->addStretch(1);
     auto *fidoDanger = new QHBoxLayout;
     fidoDanger->setSpacing(8);
     fidoDanger->addWidget(m_fidoDelete);
@@ -1489,7 +1706,9 @@ MainWindow::MainWindow(QWidget *parent)
     fidoLayout->addWidget(m_fidoNote);
     fidoLayout->addWidget(cardOf(m_fidoForm));
     fidoLayout->addLayout(fidoButtons);
+    fidoLayout->addWidget(m_fidoPrintWrap, 1);
     fidoLayout->addWidget(section(QStringLiteral("Anmeldedaten")));
+    fidoLayout->addLayout(fidoUse);
     fidoLayout->addWidget(m_fidoCredentials, 1);
     fidoLayout->addLayout(fidoDanger);
     auto *fidoPage = pageOf(fidoLayout);
@@ -1585,7 +1804,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_changePivPuk = new QPushButton(QStringLiteral("PUK ändern"));
     m_unblockPiv = new QPushButton(QStringLiteral("PIN entsperren"));
     m_pivGenerate = new QPushButton(QStringLiteral("Schlüssel erzeugen"));
+    m_pivImportKey = new QPushButton(QStringLiteral("Schlüssel importieren"));
     m_pivExport = new QPushButton(QStringLiteral("Öffentlichen Schlüssel"));
+    m_pivExportCert = new QPushButton(QStringLiteral("Zertifikat exportieren"));
+    m_pivRequest = new QPushButton(QStringLiteral("Zertifikatsanfrage"));
     m_pivImport = new QPushButton(QStringLiteral("Zertifikat importieren"));
     m_pivSign = new QPushButton(QStringLiteral("Selbst signieren"));
     m_pivDeleteCert = new QPushButton(QStringLiteral("Zertifikat löschen"));
@@ -1593,8 +1815,9 @@ MainWindow::MainWindow(QWidget *parent)
     m_pivManagementButton = new QPushButton(QStringLiteral("Management-Key"));
     m_pivReset = new QPushButton(QStringLiteral("PIV zurücksetzen"));
     m_pivReset->setObjectName(QStringLiteral("danger"));
-    for (QPushButton *button : {m_changePivPin, m_changePivPuk, m_unblockPiv, m_pivGenerate, m_pivExport,
-                                m_pivImport, m_pivSign, m_pivDeleteCert, m_pivManagementButton, m_pivReset})
+    for (QPushButton *button : {m_changePivPin, m_changePivPuk, m_unblockPiv, m_pivGenerate, m_pivImportKey,
+                                m_pivExport, m_pivExportCert, m_pivRequest, m_pivImport, m_pivSign,
+                                m_pivDeleteCert, m_pivManagementButton, m_pivReset})
         button->setEnabled(false);
     auto *pivButtons = new QHBoxLayout;
     pivButtons->setSpacing(8);
@@ -1605,11 +1828,17 @@ MainWindow::MainWindow(QWidget *parent)
     auto *pivWrite = new QHBoxLayout;
     pivWrite->setSpacing(8);
     pivWrite->addWidget(m_pivGenerate);
+    pivWrite->addWidget(m_pivImportKey);
     pivWrite->addWidget(m_pivExport);
-    pivWrite->addWidget(m_pivImport);
-    pivWrite->addWidget(m_pivSign);
-    pivWrite->addWidget(m_pivDeleteCert);
     pivWrite->addStretch(1);
+    auto *pivCerts = new QHBoxLayout;
+    pivCerts->setSpacing(8);
+    pivCerts->addWidget(m_pivExportCert);
+    pivCerts->addWidget(m_pivRequest);
+    pivCerts->addWidget(m_pivImport);
+    pivCerts->addWidget(m_pivSign);
+    pivCerts->addWidget(m_pivDeleteCert);
+    pivCerts->addStretch(1);
     auto *pivDanger = new QHBoxLayout;
     pivDanger->setSpacing(8);
     pivDanger->addWidget(m_pivManagementButton);
@@ -1622,6 +1851,7 @@ MainWindow::MainWindow(QWidget *parent)
     pivLayout->addWidget(m_pivSlots, 1);
     pivLayout->addLayout(pivButtons);
     pivLayout->addLayout(pivWrite);
+    pivLayout->addLayout(pivCerts);
     pivLayout->addLayout(pivDanger);
     auto *pivPage = pageOf(pivLayout);
 
@@ -1665,8 +1895,10 @@ MainWindow::MainWindow(QWidget *parent)
     m_setOpenPgpReset = new QPushButton(QStringLiteral("Reset-Code"));
     m_setOpenPgpSignature = new QPushButton(QStringLiteral("Signatur-PIN"));
     m_setOpenPgpTouch = new QPushButton(QStringLiteral("Berührung"));
+    m_resetOpenPgp = new QPushButton(QStringLiteral("OpenPGP zurücksetzen"));
+    m_resetOpenPgp->setObjectName(QStringLiteral("danger"));
     for (QPushButton *button : {m_changeOpenPgpPin, m_changeOpenPgpAdmin, m_setOpenPgpReset,
-                                m_setOpenPgpSignature, m_setOpenPgpTouch})
+                                m_setOpenPgpSignature, m_setOpenPgpTouch, m_resetOpenPgp})
         button->setEnabled(false);
     auto *openPgpButtons = new QHBoxLayout;
     openPgpButtons->setSpacing(8);
@@ -1676,12 +1908,17 @@ MainWindow::MainWindow(QWidget *parent)
     openPgpButtons->addWidget(m_setOpenPgpSignature);
     openPgpButtons->addWidget(m_setOpenPgpTouch);
     openPgpButtons->addStretch(1);
+    auto *openPgpDanger = new QHBoxLayout;
+    openPgpDanger->setSpacing(8);
+    openPgpDanger->addWidget(m_resetOpenPgp);
+    openPgpDanger->addStretch(1);
     auto *openPgpLayout = new QVBoxLayout;
     openPgpLayout->addWidget(m_openPgpNote);
     openPgpLayout->addWidget(cardOf(m_openPgpForm));
     openPgpLayout->addWidget(section(QStringLiteral("Schlüssel")));
     openPgpLayout->addWidget(m_openPgpKeys, 1);
     openPgpLayout->addLayout(openPgpButtons);
+    openPgpLayout->addLayout(openPgpDanger);
     auto *openPgpPage = pageOf(openPgpLayout);
 
     auto *stack = new QStackedWidget;
@@ -1788,6 +2025,9 @@ MainWindow::MainWindow(QWidget *parent)
     });
     connect(m_apply, &QPushButton::clicked, this, [this]() { applyInterfaces(QString()); });
     connect(m_changeFidoPin, &QPushButton::clicked, this, [this]() { changeFidoPinClicked(false); });
+    connect(m_fidoMinLength, &QPushButton::clicked, this, [this]() { setFidoMinLengthClicked(false); });
+    connect(m_fidoForcePin, &QPushButton::clicked, this, [this]() { forceFidoPinClicked(false); });
+    connect(m_fidoAlwaysUv, &QPushButton::clicked, this, [this]() { toggleFidoUvClicked(false); });
     connect(m_resetFido, &QPushButton::clicked, this, [this]() { resetFidoClicked(false); });
     connect(m_fidoList, &QPushButton::clicked, this, [this]() { listFidoCredentialsClicked(false); });
     connect(m_sshGenerate, &QPushButton::clicked, this, &MainWindow::generateSshClicked);
@@ -1797,6 +2037,14 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_fidoCredentials, &QTableWidget::itemSelectionChanged, this, [this]() {
         applyFidoCredentials(m_client->busy());
     });
+    connect(m_fidoPrints, &QTableWidget::itemSelectionChanged, this, [this]() {
+        applyFidoConfig(m_client->busy());
+    });
+    connect(m_fidoPrintList, &QPushButton::clicked, this, [this]() { listFidoPrintsClicked(false); });
+    connect(m_fidoPrintAdd, &QPushButton::clicked, this, [this]() { addFidoPrintClicked(false); });
+    connect(m_fidoPrintRename, &QPushButton::clicked, this, [this]() { renameFidoPrintClicked(false); });
+    connect(m_fidoPrintDelete, &QPushButton::clicked, this, [this]() { deleteFidoPrintClicked(false); });
+    connect(m_client, &YkmanClient::fidoConfigFinished, this, &MainWindow::finishFidoConfig);
     connect(m_client, &YkmanClient::fidoCredentialsFinished, this, &MainWindow::finishFidoCredentials);
     connect(m_client, &YkmanClient::fidoPinFinished, this, &MainWindow::finishFidoPin);
     connect(m_client, &YkmanClient::fidoResetFinished, this, &MainWindow::finishFidoReset);
@@ -1832,7 +2080,10 @@ MainWindow::MainWindow(QWidget *parent)
         applyPivActions(m_client->busy());
     });
     connect(m_pivGenerate, &QPushButton::clicked, this, &MainWindow::generatePivKeyClicked);
+    connect(m_pivImportKey, &QPushButton::clicked, this, &MainWindow::importPivKeyClicked);
     connect(m_pivExport, &QPushButton::clicked, this, &MainWindow::exportPivPublicClicked);
+    connect(m_pivExportCert, &QPushButton::clicked, this, &MainWindow::exportPivCertClicked);
+    connect(m_pivRequest, &QPushButton::clicked, this, &MainWindow::requestPivCertClicked);
     connect(m_pivImport, &QPushButton::clicked, this, &MainWindow::importPivCertClicked);
     connect(m_pivSign, &QPushButton::clicked, this, &MainWindow::signPivCertClicked);
     connect(m_pivDeleteCert, &QPushButton::clicked, this, &MainWindow::deletePivCertClicked);
@@ -1844,6 +2095,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_setOpenPgpReset, &QPushButton::clicked, this, &MainWindow::setOpenPgpResetClicked);
     connect(m_setOpenPgpSignature, &QPushButton::clicked, this, &MainWindow::setOpenPgpSignatureClicked);
     connect(m_setOpenPgpTouch, &QPushButton::clicked, this, &MainWindow::setOpenPgpTouchClicked);
+    connect(m_resetOpenPgp, &QPushButton::clicked, this, &MainWindow::resetOpenPgpClicked);
     connect(m_client, &YkmanClient::openpgpFinished, this, &MainWindow::finishOpenPgp);
     connect(m_client, &YkmanClient::lockCodeNeeded, this, [this](const QString &detail) {
         m_awaitingReconnect = false;
@@ -1949,6 +2201,10 @@ QString MainWindow::pageHelp() const
             "Blinkt der Key, dann berühren. "
             "Auffindbare Anmeldedaten erscheinen erst nach dem PIN. "
             "Löschen gilt für einen Eintrag und verlangt die Seriennummer. "
+            "Mindestlänge, erzwungene PIN-Änderung und die dauernde Nutzerprüfung gehen ebenfalls an die Konsole. "
+            "Die Mindestlänge lässt sich nur erhöhen und verlangt die Seriennummer. "
+            "Hat der Key einen Sensor, erscheinen die Fingerabdrücke erst nach dem PIN. "
+            "Löschen gilt für einen Abdruck und verlangt die Seriennummer. "
             "Ein SSH-Schlüssel legt auf dem PC nur eine Stub-Datei und den öffentlichen Schlüssel an. "
             "Der private Schlüssel bleibt auf dem YubiKey. Stubs holen schreibt residente Schlüssel neu.");
         if (device && onReader(*device))
@@ -1990,8 +2246,14 @@ QString MainWindow::pageHelp() const
             "PIN und PUK gehen an die Konsole von ykman und stehen nicht in der Befehlszeile. "
             "Ein Fehlversuch verbraucht einen Versuch. Ist die PIN gesperrt, entsperrt sie nur noch der PUK. "
             "Ist der PUK aufgebraucht, bleibt PIV gesperrt. "
-            "Der private Schlüssel bleibt auf dem YubiKey. Export schreibt nur den öffentlichen Schlüssel, "
-            "als PEM oder OpenSSH. Eine Stub-Datei legt PIV nicht an.");
+            "Der private Schlüssel bleibt auf dem YubiKey. Export schreibt den öffentlichen Schlüssel "
+            "als PEM oder OpenSSH und das Zertifikat als PEM oder DER. "
+            "Eine Zertifikatsanfrage geht an eine CA. "
+            "Ein vorhandener privater Schlüssel lässt sich in einen Slot legen; die Datei bleibt auf dem Rechner. "
+            "Eine Stub-Datei legt PIV nicht an.");
+        if (!piv.biometrics.isEmpty())
+            note += QStringLiteral(
+                " Die PIV-Biometrie zeigt ykman nur an. Anlegen und Löschen bietet dieser Befehl nicht.");
         if (piv.error.isEmpty()) {
             const bool known = piv.pinAttempts >= 0 || !piv.version.isEmpty();
             bool anyCert = false;
@@ -2012,7 +2274,10 @@ QString MainWindow::pageHelp() const
             "Eine feste Berührung lässt sich später nicht wieder lockern. "
             "Steht der Reset-Code auf 0, ist keiner gesetzt oder er ist gesperrt. "
             "Ist die Benutzer-PIN gesperrt, nimmt ykman den Admin-PIN dafür nur als Argument. "
-            "YubiGUI schickt ihn deshalb nicht.");
+            "YubiGUI schickt ihn deshalb nicht. "
+            "Der Reset braucht keinen PIN. Er löscht die Schlüssel und Zertifikate der Karte "
+            "und setzt die PINs auf die Werkseinstellung. Der Beglaubigungsschlüssel bleibt. "
+            "Er verlangt die Seriennummer.");
         if (record.error.isEmpty() && record.pinAttempts >= 0 && record.keys.isEmpty())
             note += QStringLiteral(" Keine Schlüssel auf der Karte.");
         return note;
@@ -2095,6 +2360,7 @@ void MainWindow::setBusy(bool busy)
     }
     applyFidoReset(busy);
     applyFidoCredentials(busy);
+    applyFidoConfig(busy);
     for (const InterfaceToggle &toggle : m_toggles) {
         if (toggle.box)
             toggle.box->setEnabled(!busy);
@@ -2316,14 +2582,34 @@ void MainWindow::showFido(const FidoRecord &fido, bool reader)
         m_changeFidoPin->setEnabled(false);
         m_fidoResetReady = false;
         m_fidoListReady = false;
+        m_fidoConfigReady = false;
+        m_fidoMinReady = false;
+        m_fidoForceReady = false;
+        m_fidoUvReady = false;
+        m_fidoPrintReady = false;
+        if (m_fidoAlwaysUv)
+            m_fidoAlwaysUv->hide();
+        if (m_fidoPrintWrap)
+            m_fidoPrintWrap->hide();
         clearFidoCredentials();
+        clearFidoPrints();
         applyFidoReset(m_client->busy());
         applyFidoCredentials(m_client->busy());
+        applyFidoConfig(m_client->busy());
         return;
     }
 
     m_fidoAaguid->setText(fido.aaguid.isEmpty() ? dash() : fido.aaguid);
-    m_fidoPin->setText(pinLabel(fido.pin));
+    if (fido.forcePinChange) {
+        if (fido.attemptsRemaining == 1)
+            m_fidoPin->setText(QStringLiteral("Muss geändert werden, 1 Versuch übrig"));
+        else if (fido.attemptsRemaining > 1)
+            m_fidoPin->setText(QStringLiteral("Muss geändert werden, %1 Versuche übrig").arg(fido.attemptsRemaining));
+        else
+            m_fidoPin->setText(QStringLiteral("Muss vor der nächsten Nutzung geändert werden"));
+    } else {
+        m_fidoPin->setText(pinLabel(fido.pin));
+    }
     m_fidoPinLength->setText(fido.minimumPinLength.isEmpty() ? dash() : fido.minimumPinLength);
     m_fidoUv->setText(onOff(fido.alwaysUv));
     m_fidoStorage->setText(fido.storageRemaining.isEmpty() ? dash() : fido.storageRemaining);
@@ -2341,16 +2627,49 @@ void MainWindow::showFido(const FidoRecord &fido, bool reader)
         note += QStringLiteral(
             "Anmeldedaten über das Lesegerät lehnt der Key ab, sobald die Freigabe vom Auflegen verbraucht ist. Dafür den Key per USB anstecken.");
     }
+    if (fido.forcePinChange) {
+        if (!note.isEmpty())
+            note += QLatin1Char(' ');
+        note += QStringLiteral(
+            "Der PIN muss geändert werden, bevor Fingerabdrücke, Anmeldedaten oder die übrigen Einstellungen gehen.");
+    }
     showNote(m_fidoNote, note);
     const bool canChange = fido.minPinLength > 0 && (!fido.pinSet || fido.attemptsRemaining > 0);
     m_changeFidoPin->setText(fido.pinSet ? QStringLiteral("PIN ändern") : QStringLiteral("PIN setzen"));
     m_changeFidoPin->setEnabled(canChange && !m_client->busy());
+    const bool pinUsable = haveFido && fido.pinSet && fido.attemptsRemaining > 0 && !fido.forcePinChange;
     m_fidoResetReady = haveFido && !fido.resetBlocked;
-    m_fidoListReady = haveFido && fido.pinSet && fido.attemptsRemaining > 0;
+    m_fidoListReady = pinUsable;
+    m_fidoConfigReady = pinUsable;
+    int lengthCeiling = 63;
+    for (const DeviceRecord &device : m_client->snapshot().devices) {
+        if (device.serial == m_selectedSerial
+            && device.formFactor.contains(QLatin1String("Bio"), Qt::CaseInsensitive)
+            && m_client->snapshot().piv.error.isEmpty()
+            && !m_client->snapshot().piv.version.isEmpty())
+            lengthCeiling = 8;
+    }
+    m_fidoMinReady = haveFido && !fido.forcePinChange && fido.minPinLength > 0
+                     && fido.minPinLength < lengthCeiling
+                     && (!fido.pinSet || fido.attemptsRemaining > 0);
+    m_fidoForceReady = pinUsable;
+    const bool uvKnown = fido.alwaysUv.compare(QLatin1String("on"), Qt::CaseInsensitive) == 0
+                         || fido.alwaysUv.compare(QLatin1String("off"), Qt::CaseInsensitive) == 0;
+    m_fidoUvReady = haveFido && uvKnown && !fido.forcePinChange && (!fido.pinSet || fido.attemptsRemaining > 0);
+    m_fidoAlwaysUv->setVisible(uvKnown);
+    m_fidoAlwaysUv->setToolTip(fido.alwaysUv.compare(QLatin1String("on"), Qt::CaseInsensitive) == 0
+                                   ? QStringLiteral("Schaltet die dauernde Nutzerprüfung aus.")
+                                   : QStringLiteral(
+                                         "Verlangt danach bei jeder FIDO-Anmeldung den PIN oder einen Fingerabdruck."));
+    m_fidoPrintReady = pinUsable && !fido.fingerprints.isEmpty();
+    m_fidoPrintWrap->setVisible(!fido.fingerprints.isEmpty());
+    if (fido.fingerprints.isEmpty())
+        clearFidoPrints();
     if (!haveFido)
         clearFidoCredentials();
     applyFidoReset(m_client->busy());
     applyFidoCredentials(m_client->busy());
+    applyFidoConfig(m_client->busy());
 }
 
 void MainWindow::showSnapshot()
@@ -2573,6 +2892,393 @@ void MainWindow::applyFidoCredentials(bool busy)
     if (m_fidoCredentials && m_fidoCredentials->selectionModel())
         selected = !m_fidoCredentials->selectionModel()->selectedRows().isEmpty();
     m_fidoDelete->setEnabled(!busy && m_fidoListReady && m_fidoCredentialsLoaded && selected);
+}
+
+void MainWindow::applyFidoConfig(bool busy)
+{
+    if (!m_fidoMinLength)
+        return;
+    m_fidoMinLength->setEnabled(!busy && m_fidoMinReady);
+    m_fidoForcePin->setEnabled(!busy && m_fidoForceReady);
+    m_fidoAlwaysUv->setEnabled(!busy && m_fidoUvReady);
+    m_fidoPrintList->setEnabled(!busy && m_fidoPrintReady);
+    m_fidoPrintAdd->setEnabled(!busy && m_fidoPrintReady);
+    bool selected = false;
+    if (m_fidoPrints && m_fidoPrints->selectionModel())
+        selected = !m_fidoPrints->selectionModel()->selectedRows().isEmpty();
+    m_fidoPrintRename->setEnabled(!busy && m_fidoPrintReady && m_fidoPrintsLoaded && selected);
+    m_fidoPrintDelete->setEnabled(!busy && m_fidoPrintReady && m_fidoPrintsLoaded && selected);
+}
+
+void MainWindow::clearFidoPrints()
+{
+    m_fidoPrintsLoaded = false;
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    if (m_fidoPrints)
+        m_fidoPrints->setRowCount(0);
+}
+
+QString MainWindow::selectedFidoPrint(QString *name) const
+{
+    if (!m_fidoPrints || !m_fidoPrints->selectionModel())
+        return {};
+    const QModelIndexList rows = m_fidoPrints->selectionModel()->selectedRows();
+    if (rows.isEmpty())
+        return {};
+    const QTableWidgetItem *item = m_fidoPrints->item(rows.first().row(), 1);
+    if (!item || !fidoTemplateId(item->text()))
+        return {};
+    if (name) {
+        const QTableWidgetItem *label = m_fidoPrints->item(rows.first().row(), 0);
+        *name = label ? label->text() : QString();
+        if (*name == dash())
+            name->clear();
+    }
+    return item->text();
+}
+
+void MainWindow::startFidoConfig(bool elevated)
+{
+    if (m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    const FidoRecord fido = m_client->snapshot().fido;
+    QString title = QStringLiteral("FIDO");
+    QString extra;
+    QString accept = QStringLiteral("Weiter");
+    QString status = QStringLiteral("Falls der Key blinkt, jetzt berühren.");
+    switch (m_fidoConfigAction) {
+    case FidoConfigAction::ToggleAlwaysUv:
+        title = QStringLiteral("Nutzerprüfung");
+        extra = QStringLiteral("Der PIN schaltet die Einstellung um.");
+        accept = QStringLiteral("Umschalten");
+        status = QStringLiteral("Die Nutzerprüfung wird umgeschaltet. Falls der Key blinkt, jetzt berühren.");
+        break;
+    case FidoConfigAction::SetMinLength:
+        title = QStringLiteral("Mindestlänge");
+        extra = QStringLiteral("Der PIN setzt die neue Mindestlänge.");
+        accept = QStringLiteral("Setzen");
+        status = QStringLiteral("Die Mindestlänge wird gesetzt. Falls der Key blinkt, jetzt berühren.");
+        break;
+    case FidoConfigAction::ForceChange:
+        title = QStringLiteral("PIN erzwingen");
+        extra = QStringLiteral("Der bisherige PIN bestätigt die Sperre.");
+        accept = QStringLiteral("Erzwingen");
+        status = QStringLiteral("Die PIN-Änderung wird erzwungen. Falls der Key blinkt, jetzt berühren.");
+        break;
+    case FidoConfigAction::FingerprintsList:
+        title = QStringLiteral("Fingerabdrücke");
+        extra = QStringLiteral("Die Liste wird erst danach gelesen.");
+        accept = QStringLiteral("Anzeigen");
+        status = QStringLiteral("Die Fingerabdrücke werden gelesen. Falls der Key blinkt, jetzt berühren.");
+        break;
+    case FidoConfigAction::FingerprintsAdd:
+        title = QStringLiteral("Fingerabdruck hinzufügen");
+        extra = QStringLiteral("Danach den Finger auf den Sensor legen, bis die Aufnahme fertig ist.");
+        accept = QStringLiteral("Aufnehmen");
+        status = QStringLiteral(
+            "Den Finger auf den Sensor legen und liegen lassen. ykman braucht mehrere Aufnahmen.");
+        break;
+    case FidoConfigAction::FingerprintsRename:
+        title = QStringLiteral("Fingerabdruck umbenennen");
+        extra = QStringLiteral("Der PIN ändert den Namen.");
+        accept = QStringLiteral("Umbenennen");
+        status = QStringLiteral("Der Name wird geändert. Falls der Key blinkt, jetzt berühren.");
+        break;
+    case FidoConfigAction::FingerprintsDelete:
+        title = QStringLiteral("Fingerabdruck löschen");
+        extra = QStringLiteral("Der PIN gilt für diesen einen Abdruck.");
+        accept = QStringLiteral("Löschen bestätigen");
+        status = QStringLiteral("Der Fingerabdruck wird gelöscht. Falls der Key blinkt, jetzt berühren.");
+        break;
+    }
+
+    QString pin;
+    if (fido.pinSet) {
+        pin = askFidoVerifyPin(this, fido, title, extra, accept);
+        if (pin.isEmpty()) {
+            m_fidoConfigName.clear();
+            m_fidoConfigId.clear();
+            return;
+        }
+    }
+    FidoConfigRequest request;
+    request.action = m_fidoConfigAction;
+    request.pin = pin;
+    request.name = m_fidoConfigName;
+    request.templateId = m_fidoConfigId;
+    request.length = m_fidoConfigLength;
+    setBusy(true);
+    statusBar()->showMessage(status);
+    m_client->runFidoConfig(m_selectedSerial, request, elevated);
+    wipeSecret(pin);
+    wipeSecret(request.pin);
+}
+
+void MainWindow::setFidoMinLengthClicked(bool elevated)
+{
+    if (!m_fidoMinReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    const FidoRecord fido = m_client->snapshot().fido;
+    int ceiling = 63;
+    for (const DeviceRecord &device : m_client->snapshot().devices) {
+        if (device.serial == m_selectedSerial
+            && device.formFactor.contains(QLatin1String("Bio"), Qt::CaseInsensitive)
+            && m_client->snapshot().piv.error.isEmpty()
+            && !m_client->snapshot().piv.version.isEmpty())
+            ceiling = 8;
+    }
+    if (!elevated) {
+        const int length = askFidoMinLength(this, fido.minPinLength, ceiling);
+        if (length < fido.minPinLength + 1 || length > ceiling)
+            return;
+        if (!confirmSerial(this, m_selectedSerial, QStringLiteral("Mindestlänge"),
+                           QStringLiteral("Die neue Mindestlänge ist %1. Kürzer geht danach nur über einen FIDO-Reset, "
+                                          "und der löscht die Anmeldedaten.\n\n"
+                                          "Zum Bestätigen die Seriennummer eintippen.")
+                               .arg(length),
+                           QStringLiteral("Setzen")))
+            return;
+        m_fidoConfigLength = length;
+    }
+    m_fidoConfigAction = FidoConfigAction::SetMinLength;
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    startFidoConfig(elevated);
+}
+
+void MainWindow::forceFidoPinClicked(bool elevated)
+{
+    if (!m_fidoForceReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    if (!elevated) {
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Warning);
+        box.setWindowTitle(QStringLiteral("PIN erzwingen"));
+        box.setText(QStringLiteral(
+            "Der PIN gilt danach als gesperrt, bis er geändert wird. "
+            "Anmeldedaten, Fingerabdrücke und die übrigen FIDO-Einstellungen brauchen zuerst den neuen PIN."));
+        auto *accept = box.addButton(QStringLiteral("Erzwingen"), QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("Abbrechen"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() != accept)
+            return;
+    }
+    m_fidoConfigAction = FidoConfigAction::ForceChange;
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::toggleFidoUvClicked(bool elevated)
+{
+    if (!m_fidoUvReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    const bool on = m_client->snapshot().fido.alwaysUv.compare(QLatin1String("on"), Qt::CaseInsensitive) == 0;
+    if (!elevated) {
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Question);
+        box.setWindowTitle(QStringLiteral("Nutzerprüfung"));
+        box.setText(on ? QStringLiteral(
+                        "Die Nutzerprüfung wird nicht mehr bei jeder FIDO-Anmeldung verlangt. "
+                        "Ein Dienst kann sie weiter verlangen.")
+                     : QStringLiteral(
+                        "Jede FIDO-Anmeldung verlangt danach den PIN oder einen Fingerabdruck, "
+                        "auch wenn der Dienst das nicht verlangt."));
+        auto *accept = box.addButton(QStringLiteral("Umschalten"), QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("Abbrechen"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() != accept)
+            return;
+    }
+    m_fidoConfigAction = FidoConfigAction::ToggleAlwaysUv;
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::listFidoPrintsClicked(bool elevated)
+{
+    if (!m_fidoPrintReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    m_fidoConfigAction = FidoConfigAction::FingerprintsList;
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::addFidoPrintClicked(bool elevated)
+{
+    if (!m_fidoPrintReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    if (!elevated) {
+        const QString name = askFidoPrintName(this, QStringLiteral("Fingerabdruck hinzufügen"), QString());
+        if (name.isEmpty())
+            return;
+        m_fidoConfigName = name;
+    }
+    m_fidoConfigAction = FidoConfigAction::FingerprintsAdd;
+    m_fidoConfigId.clear();
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::renameFidoPrintClicked(bool elevated)
+{
+    if (!m_fidoPrintReady || !m_fidoPrintsLoaded || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    if (!elevated) {
+        QString current;
+        const QString id = selectedFidoPrint(&current);
+        if (!fidoTemplateId(id))
+            return;
+        const QString name = askFidoPrintName(this, QStringLiteral("Fingerabdruck umbenennen"), current);
+        if (name.isEmpty())
+            return;
+        m_fidoConfigId = id;
+        m_fidoConfigName = name;
+    }
+    m_fidoConfigAction = FidoConfigAction::FingerprintsRename;
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::deleteFidoPrintClicked(bool elevated)
+{
+    if (!m_fidoPrintReady || !m_fidoPrintsLoaded || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    if (!elevated) {
+        QString name;
+        const QString id = selectedFidoPrint(&name);
+        if (!fidoTemplateId(id))
+            return;
+        const QString who = name.isEmpty() ? id : QStringLiteral("%1 (%2)").arg(name, id);
+        if (!confirmSerial(this, m_selectedSerial, QStringLiteral("Fingerabdruck löschen"),
+                           QStringLiteral("Der Fingerabdruck %1 wird gelöscht. "
+                                          "Zum Bestätigen die Seriennummer eintippen.")
+                               .arg(who),
+                           QStringLiteral("Endgültig löschen")))
+            return;
+        m_fidoConfigId = id;
+        m_fidoConfigName = name;
+    }
+    m_fidoConfigAction = FidoConfigAction::FingerprintsDelete;
+    m_fidoConfigLength = 0;
+    startFidoConfig(elevated);
+}
+
+void MainWindow::finishFidoConfig(bool ok, int action, const QString &detail, const QString &output)
+{
+    QString body = output;
+    const auto kind = FidoConfigAction(action);
+    if (!ok && fidoAccessDenied(detail)) {
+        body.fill(QLatin1Char('0'));
+        body.clear();
+        setBusy(false);
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Question);
+        box.setWindowTitle(QStringLiteral("Erhöhte Sitzung"));
+        box.setText(QStringLiteral(
+            "Windows hat den FIDO-Zugriff abgelehnt. Nur dieser Aufruf wird erhöht neu gestartet. "
+            "Den PIN bitte noch einmal eingeben. Er geht nicht auf die Befehlszeile."));
+        auto *accept = box.addButton(QStringLiteral("Erhöhen"), QMessageBox::AcceptRole);
+        box.addButton(QStringLiteral("Abbrechen"), QMessageBox::RejectRole);
+        box.exec();
+        if (box.clickedButton() == accept) {
+            switch (kind) {
+            case FidoConfigAction::ToggleAlwaysUv:
+                toggleFidoUvClicked(true);
+                break;
+            case FidoConfigAction::SetMinLength:
+                setFidoMinLengthClicked(true);
+                break;
+            case FidoConfigAction::ForceChange:
+                forceFidoPinClicked(true);
+                break;
+            case FidoConfigAction::FingerprintsList:
+                listFidoPrintsClicked(true);
+                break;
+            case FidoConfigAction::FingerprintsAdd:
+                addFidoPrintClicked(true);
+                break;
+            case FidoConfigAction::FingerprintsRename:
+                renameFidoPrintClicked(true);
+                break;
+            case FidoConfigAction::FingerprintsDelete:
+                deleteFidoPrintClicked(true);
+                break;
+            }
+        } else {
+            m_fidoConfigName.clear();
+            m_fidoConfigId.clear();
+            statusBar()->showMessage(QStringLiteral("Die erhöhte Sitzung wurde abgebrochen."));
+        }
+        return;
+    }
+
+    if (!ok) {
+        body.fill(QLatin1Char('0'));
+        body.clear();
+        m_fidoConfigName.clear();
+        m_fidoConfigId.clear();
+        m_pendingStatus = fidoConfigText(false, kind, detail, QString());
+        refresh();
+        return;
+    }
+
+    if (kind == FidoConfigAction::FingerprintsList) {
+        const QList<FidoPrint> prints = parseFidoPrints(body);
+        body.fill(QLatin1Char('0'));
+        body.clear();
+        const QFont fixed = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+        m_fidoPrints->setRowCount(prints.size());
+        for (int row = 0; row < prints.size(); ++row) {
+            const FidoPrint &print = prints.at(row);
+            const auto selectable = [](const QString &text) {
+                QTableWidgetItem *item = cell(text);
+                item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                return item;
+            };
+            auto *ident = selectable(print.id);
+            ident->setFont(fixed);
+            m_fidoPrints->setItem(row, 0, selectable(print.name.isEmpty() ? dash() : print.name));
+            m_fidoPrints->setItem(row, 1, ident);
+        }
+        m_fidoPrintsLoaded = true;
+        m_pendingStatus = prints.isEmpty() ? QStringLiteral("Keine Fingerabdrücke.")
+                                           : QStringLiteral("%1 Fingerabdrücke gelesen.").arg(prints.size());
+        refresh();
+        return;
+    }
+
+    if (kind == FidoConfigAction::FingerprintsRename) {
+        for (int row = 0; row < m_fidoPrints->rowCount(); ++row) {
+            const QTableWidgetItem *ident = m_fidoPrints->item(row, 1);
+            if (ident && ident->text() == m_fidoConfigId && m_fidoPrints->item(row, 0))
+                m_fidoPrints->item(row, 0)->setText(m_fidoConfigName);
+        }
+    } else if (kind == FidoConfigAction::FingerprintsDelete) {
+        for (int row = m_fidoPrints->rowCount() - 1; row >= 0; --row) {
+            const QTableWidgetItem *ident = m_fidoPrints->item(row, 1);
+            if (ident && ident->text() == m_fidoConfigId)
+                m_fidoPrints->removeRow(row);
+        }
+        if (m_fidoPrints->rowCount() == 0)
+            m_fidoPrintsLoaded = false;
+    } else if (kind == FidoConfigAction::FingerprintsAdd) {
+        clearFidoPrints();
+    }
+
+    const QString status = fidoConfigText(true, kind, detail, body);
+    body.fill(QLatin1Char('0'));
+    body.clear();
+    m_fidoConfigName.clear();
+    m_fidoConfigId.clear();
+    m_pendingStatus = status;
+    refresh();
 }
 
 namespace {
@@ -3664,8 +4370,12 @@ QString pivFailureText(const QString &detail)
             "Ein Werksreset des ganzen Keys ist hier nicht vorgesehen.");
     if (text.contains(QLatin1String("wrong management key")) || text.contains(QLatin1String("authentication failed")))
         return QStringLiteral("Der Management-Key wurde abgelehnt.");
-    if (text.contains(QLatin1String("cannot sign")))
+    if (text.contains(QLatin1String("cannot sign")) || text.contains(QLatin1String("signing not supported")))
         return QStringLiteral("Dieser Schlüssel kann kein Zertifikat unterschreiben.");
+    if (text.contains(QLatin1String("password")) || text.contains(QLatin1String("decrypt")))
+        return QStringLiteral("Das Dateipasswort wurde abgelehnt.");
+    if (text.contains(QLatin1String("no certificate")) || text.contains(QLatin1String("no cert")))
+        return QStringLiteral("In diesem Slot liegt kein Zertifikat.");
     if (text.contains(QLatin1String("invalid subject")))
         return QStringLiteral("Der Name des Zertifikats ist ungültig.");
     if (text.contains(QLatin1String("tries left"))) {
@@ -3725,9 +4435,18 @@ void MainWindow::applyPivActions(bool busy)
         }
     }
     m_pivGenerate->setEnabled(!busy && m_pivWriteReady);
+    m_pivImportKey->setEnabled(!busy && m_pivWriteReady);
+    m_pivImportKey->setToolTip(QStringLiteral(
+        "Legt einen vorhandenen privaten Schlüssel in den Slot. Die Datei auf dem Rechner bleibt liegen."));
     m_pivExport->setEnabled(!busy && keySelected);
     m_pivExport->setToolTip(QStringLiteral(
         "Schreibt den öffentlichen Schlüssel des Slots. Den privaten Schlüssel gibt der Key nicht heraus."));
+    m_pivExportCert->setEnabled(!busy && certSelected);
+    m_pivExportCert->setToolTip(QStringLiteral(
+        "Schreibt das Zertifikat aus dem Slot. Der private Schlüssel bleibt auf dem YubiKey."));
+    m_pivRequest->setEnabled(!busy && m_pivWriteReady && keySelected);
+    m_pivRequest->setToolTip(QStringLiteral(
+        "Schreibt eine Zertifikatsanfrage für eine CA. Der private Schlüssel bleibt auf dem YubiKey."));
     m_pivImport->setEnabled(!busy && m_pivWriteReady);
     m_pivSign->setEnabled(!busy && m_pivWriteReady);
     m_pivDeleteCert->setEnabled(!busy && m_pivWriteReady && certSelected);
@@ -3795,9 +4514,15 @@ void MainWindow::showPiv(const PivRecord &piv)
         m_pivSlots->setItem(row, 2, selectable(slot.expires.isEmpty() ? dash() : slot.expires));
     }
 
-    showNote(m_pivNote, piv.resetBlocked
-        ? QStringLiteral("Der PIV-Reset ist gesperrt, solange FIDO eingerichtet ist.")
-        : QString());
+    showNote(m_pivNote, [&]() {
+        QStringList lines;
+        if (piv.resetBlocked)
+            lines << QStringLiteral("Der PIV-Reset ist gesperrt, solange FIDO eingerichtet ist.");
+        if (!piv.biometrics.isEmpty())
+            lines << QStringLiteral(
+                "Die PIV-Biometrie zeigt ykman nur an. Anlegen und Löschen bietet dieser Befehl nicht.");
+        return lines.join(QLatin1Char(' '));
+    }());
     m_pivPinReady = piv.pinAttempts > 0;
     m_pivPukReady = piv.pukAttempts > 0;
     m_pivUnblockReady = piv.pinAttempts == 0 && piv.pukAttempts > 0;
@@ -3904,6 +4629,14 @@ void MainWindow::finishPiv(bool ok, int action, const QString &detail)
         m_pendingStatus = detail == QLatin1String("ssh")
                               ? QStringLiteral("Der öffentliche OpenSSH-Schlüssel wurde geschrieben.")
                               : QStringLiteral("Der öffentliche Schlüssel wurde geschrieben.");
+    else if (kind == PivAction::ExportCert)
+        m_pendingStatus = QStringLiteral("Das Zertifikat wurde geschrieben.");
+    else if (kind == PivAction::ImportKey)
+        m_pendingStatus = QStringLiteral(
+            "Der private Schlüssel wurde in den Slot gelegt. Die Datei auf dem Rechner bleibt liegen.");
+    else if (kind == PivAction::RequestCert)
+        m_pendingStatus = QStringLiteral(
+            "Die Zertifikatsanfrage wurde geschrieben. Der private Schlüssel bleibt auf dem YubiKey.");
     else if (kind == PivAction::ImportCert)
         m_pendingStatus = QStringLiteral("Das Zertifikat wurde importiert.");
     else if (kind == PivAction::GenerateCert)
@@ -3920,6 +4653,51 @@ void MainWindow::finishPiv(bool ok, int action, const QString &detail)
 }
 
 namespace {
+
+bool pivSigns(const QString &keyType)
+{
+    const QString id = keyType.toLower();
+    return !id.contains(QLatin1String("x25519")) && !id.contains(QLatin1String("ml-kem"))
+           && !id.contains(QLatin1String("mlkem"));
+}
+
+bool privateKeyNeedsPassword(const QString &path)
+{
+    QFile input(path);
+    if (!input.open(QIODevice::ReadOnly))
+        return true;
+    const QByteArray head = input.read(400);
+    if (!head.contains("-----BEGIN"))
+        return true;
+    return head.contains("ENCRYPTED");
+}
+
+bool publicPemOk(const QString &path, QString *problem)
+{
+    QFile input(path);
+    if (!input.open(QIODevice::ReadOnly)) {
+        *problem = QStringLiteral("Die Datei mit dem öffentlichen Schlüssel lässt sich nicht lesen.");
+        return false;
+    }
+    const QByteArray head = input.read(256);
+    if (head.contains("PRIVATE KEY") || head.contains("ENCRYPTED")) {
+        *problem = QStringLiteral(
+            "Das ist ein privater Schlüssel. Die Anfrage braucht die öffentliche PEM-Datei.");
+        return false;
+    }
+    if (!head.contains("-----BEGIN") || !head.contains("PUBLIC KEY")) {
+        *problem = QStringLiteral("Die Datei ist keine öffentliche PEM.");
+        return false;
+    }
+    return true;
+}
+
+bool sameFile(const QString &left, const QString &right)
+{
+    return QFileInfo(left).absoluteFilePath().compare(QFileInfo(right).absoluteFilePath(),
+                                                      Qt::CaseInsensitive)
+           == 0;
+}
 
 bool pivSlotOk(const QString &slot)
 {
@@ -4307,6 +5085,289 @@ void MainWindow::exportPivPublicClicked()
     startPiv(request, QStringLiteral("Der öffentliche Schlüssel wird geschrieben."));
 }
 
+void MainWindow::exportPivCertClicked()
+{
+    if (m_client->busy() || !m_pivSlots || !m_pivSlots->selectionModel())
+        return;
+    const QModelIndexList rows = m_pivSlots->selectionModel()->selectedRows();
+    if (rows.isEmpty())
+        return;
+    const QTableWidgetItem *item = m_pivSlots->item(rows.first().row(), 0);
+    if (!item || !item->data(Qt::UserRole + 1).toBool())
+        return;
+    const QString id = item->data(Qt::UserRole).toString();
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Zertifikat exportieren"));
+    dialog.setMinimumWidth(480);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *info = new QLabel(QStringLiteral(
+        "Exportiert wird das Zertifikat aus dem Slot. Der private Schlüssel bleibt auf dem YubiKey."));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *format = new QComboBox;
+    format->addItem(QStringLiteral("PEM"), QStringLiteral("pem"));
+    format->addItem(QStringLiteral("DER"), QStringLiteral("der"));
+    auto *path = new QLineEdit;
+    path->setReadOnly(true);
+    auto *browse = new QPushButton(QStringLiteral("Datei…"));
+    QObject::connect(browse, &QPushButton::clicked, &dialog, [this, path, format]() {
+        const bool der = format->currentData().toString() == QLatin1String("der");
+        const QString file = QFileDialog::getSaveFileName(
+            this, QStringLiteral("Zertifikat speichern"), QString(),
+            der ? QStringLiteral("DER (*.der *.cer)") : QStringLiteral("PEM (*.pem *.crt)"));
+        if (!file.isEmpty())
+            path->setText(file);
+    });
+    auto *fileRow = new QHBoxLayout;
+    fileRow->addWidget(path, 1);
+    fileRow->addWidget(browse);
+    auto *form = new QFormLayout;
+    form->addRow(QStringLiteral("Format"), format);
+    form->addRow(QStringLiteral("Datei"), fileRow);
+    layout->addLayout(form);
+    auto *problem = new QLabel;
+    problem->setWordWrap(true);
+    layout->addWidget(problem);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Exportieren"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Abbrechen"));
+    layout->addWidget(buttons);
+    PivRequest request;
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        if (!pivSlotOk(id)) {
+            problem->setText(QStringLiteral("Der Slot ist ungültig."));
+            return;
+        }
+        if (path->text().isEmpty()) {
+            problem->setText(QStringLiteral("Die Datei für das Zertifikat fehlt."));
+            return;
+        }
+        request.action = PivAction::ExportCert;
+        request.slot = id;
+        request.outputPath = path->text();
+        request.format = format->currentData().toString();
+        dialog.accept();
+    });
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    startPiv(request, QStringLiteral("Das Zertifikat wird geschrieben."));
+}
+
+void MainWindow::requestPivCertClicked()
+{
+    if (!m_pivWriteReady || m_client->busy())
+        return;
+    const PivRecord piv = m_client->snapshot().piv;
+    const QString selected = selectedPivSlot();
+    const PivSlotInfo *selectedEntry = pivEntry(piv, selected);
+    if (!selectedEntry || selectedEntry->keyType.isEmpty())
+        return;
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Zertifikatsanfrage"));
+    dialog.setMinimumWidth(520);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *info = new QLabel(attemptSentence(piv) + QStringLiteral(
+        " Die Anfrage wird mit dem Schlüssel im Slot unterschrieben. "
+        "Die öffentliche PEM kommt aus „Schlüssel erzeugen“ oder „Öffentlichen Schlüssel“. "
+        "X25519 kann das nicht. Die PIN geht an die Konsole von ykman. "
+        "Der private Schlüssel bleibt auf dem YubiKey."));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *slot = pivSlotBox(selected);
+    auto *subject = new QLineEdit;
+    auto *publicKey = new QLineEdit;
+    publicKey->setReadOnly(true);
+    auto *publicBrowse = new QPushButton(QStringLiteral("Datei…"));
+    QObject::connect(publicBrowse, &QPushButton::clicked, &dialog, [this, publicKey]() {
+        const QString file = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Öffentlichen Schlüssel wählen"), QString(),
+            QStringLiteral("PEM (*.pem)"));
+        if (!file.isEmpty())
+            publicKey->setText(file);
+    });
+    auto *publicRow = new QHBoxLayout;
+    publicRow->addWidget(publicKey, 1);
+    publicRow->addWidget(publicBrowse);
+    auto *csr = new QLineEdit;
+    csr->setReadOnly(true);
+    auto *csrBrowse = new QPushButton(QStringLiteral("Datei…"));
+    QObject::connect(csrBrowse, &QPushButton::clicked, &dialog, [this, csr]() {
+        const QString file = QFileDialog::getSaveFileName(
+            this, QStringLiteral("Zertifikatsanfrage speichern"), QString(),
+            QStringLiteral("CSR (*.csr *.pem)"));
+        if (!file.isEmpty())
+            csr->setText(file);
+    });
+    auto *csrRow = new QHBoxLayout;
+    csrRow->addWidget(csr, 1);
+    csrRow->addWidget(csrBrowse);
+    auto *form = new QFormLayout;
+    form->addRow(QStringLiteral("Slot"), slot);
+    form->addRow(QStringLiteral("Name"), subject);
+    form->addRow(QStringLiteral("Öffentlicher Schlüssel"), publicRow);
+    form->addRow(QStringLiteral("Anfrage"), csrRow);
+    layout->addLayout(form);
+    auto *pin = new QLineEdit;
+    pin->setEchoMode(QLineEdit::Password);
+    form->addRow(QStringLiteral("PIN"), pin);
+    auto *problem = new QLabel;
+    problem->setWordWrap(true);
+    layout->addWidget(problem);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Anfrage schreiben"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Abbrechen"));
+    layout->addWidget(buttons);
+    PivRequest request;
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        const QString id = slot->currentData().toString();
+        const PivSlotInfo *entry = pivEntry(piv, id);
+        if (!pivSlotOk(id) || !entry || entry->keyType.isEmpty()) {
+            problem->setText(QStringLiteral("In diesem Slot liegt kein Schlüssel."));
+            return;
+        }
+        if (!pivSigns(entry->keyType)) {
+            problem->setText(QStringLiteral("Dieser Schlüssel kann kein Zertifikat unterschreiben."));
+            return;
+        }
+        const QString name = subject->text().trimmed();
+        if (name.isEmpty() || name.contains(QLatin1Char('\n')) || name.contains(QLatin1Char('\r'))) {
+            problem->setText(QStringLiteral("Der Name fehlt."));
+            return;
+        }
+        QString why;
+        if (!publicPemOk(publicKey->text(), &why)) {
+            problem->setText(why);
+            return;
+        }
+        if (csr->text().isEmpty()) {
+            problem->setText(QStringLiteral("Die Datei für die Anfrage fehlt."));
+            return;
+        }
+        if (sameFile(publicKey->text(), csr->text())) {
+            problem->setText(QStringLiteral("Die Anfrage darf die öffentliche PEM nicht überschreiben."));
+            return;
+        }
+        if (!pivLengthOk(pin->text())) {
+            problem->setText(QStringLiteral("Die PIN braucht 6 bis 8 Zeichen."));
+            return;
+        }
+        request.action = PivAction::RequestCert;
+        request.slot = id;
+        request.subject = name.contains(QLatin1Char('=')) ? name : QStringLiteral("CN=%1").arg(name);
+        request.inputPath = publicKey->text();
+        request.outputPath = csr->text();
+        request.pin = pin->text();
+        dialog.accept();
+    });
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    wipeEdit(pin);
+    if (!accepted) {
+        wipePiv(request);
+        return;
+    }
+    startPiv(request, QStringLiteral("Die Zertifikatsanfrage wird geschrieben. Falls der Key blinkt, jetzt berühren."));
+}
+
+void MainWindow::importPivKeyClicked()
+{
+    if (!m_pivWriteReady || m_client->busy())
+        return;
+    const PivRecord piv = m_client->snapshot().piv;
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("Schlüssel importieren"));
+    dialog.setMinimumWidth(520);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *info = new QLabel(attemptSentence(piv) + QStringLiteral(
+        " Der private Schlüssel kommt aus einer Datei und bleibt in dieser Datei liegen. "
+        "Die PIN geht an die Konsole von ykman. Ein belegter Slot wird ersetzt und verlangt die Seriennummer. "
+        "Das Zertifikat im Slot bleibt liegen."));
+    info->setWordWrap(true);
+    layout->addWidget(info);
+    auto *slot = pivSlotBox(selectedPivSlot());
+    auto *path = new QLineEdit;
+    path->setReadOnly(true);
+    auto *password = new QLineEdit;
+    password->setEchoMode(QLineEdit::Password);
+    password->setEnabled(false);
+    auto *browse = new QPushButton(QStringLiteral("Datei…"));
+    QObject::connect(browse, &QPushButton::clicked, &dialog, [this, path, password]() {
+        const QString file = QFileDialog::getOpenFileName(
+            this, QStringLiteral("Privaten Schlüssel wählen"), QString(),
+            QStringLiteral("Privater Schlüssel (*.pem *.key *.p12 *.pfx)"));
+        if (file.isEmpty())
+            return;
+        path->setText(file);
+        const bool needsPassword = privateKeyNeedsPassword(file);
+        password->setEnabled(needsPassword);
+        if (!needsPassword)
+            password->clear();
+    });
+    auto *fileRow = new QHBoxLayout;
+    fileRow->addWidget(path, 1);
+    fileRow->addWidget(browse);
+    auto *pinPolicy = new QComboBox;
+    pinPolicy->addItem(QStringLiteral("Voreinstellung"), QStringLiteral("default"));
+    pinPolicy->addItem(QStringLiteral("Einmal je Sitzung"), QStringLiteral("once"));
+    pinPolicy->addItem(QStringLiteral("Jedes Mal"), QStringLiteral("always"));
+    pinPolicy->addItem(QStringLiteral("Nie"), QStringLiteral("never"));
+    auto *touchPolicy = new QComboBox;
+    touchPolicy->addItem(QStringLiteral("Voreinstellung"), QStringLiteral("default"));
+    touchPolicy->addItem(QStringLiteral("Nie"), QStringLiteral("never"));
+    touchPolicy->addItem(QStringLiteral("Immer"), QStringLiteral("always"));
+    touchPolicy->addItem(QStringLiteral("Kurz merken"), QStringLiteral("cached"));
+    auto *form = new QFormLayout;
+    form->addRow(QStringLiteral("Slot"), slot);
+    form->addRow(QStringLiteral("Datei"), fileRow);
+    form->addRow(QStringLiteral("Dateipasswort"), password);
+    form->addRow(QStringLiteral("PIN-Regel"), pinPolicy);
+    form->addRow(QStringLiteral("Berührung"), touchPolicy);
+    layout->addLayout(form);
+    AuthWidgets auth = addAuth(form, layout, piv);
+    auto *problem = new QLabel;
+    problem->setWordWrap(true);
+    layout->addWidget(problem);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Importieren"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("Abbrechen"));
+    layout->addWidget(buttons);
+    PivRequest request;
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
+        const QString id = slot->currentData().toString();
+        if (!pivSlotOk(id) || path->text().isEmpty()) {
+            problem->setText(QStringLiteral("Slot und Schlüsseldatei werden gebraucht."));
+            return;
+        }
+        if (password->isEnabled() && password->text().isEmpty()) {
+            problem->setText(QStringLiteral("Das Dateipasswort fehlt."));
+            return;
+        }
+        const PivSlotInfo *entry = pivEntry(piv, id);
+        const bool occupied = entry && (!entry->keyType.isEmpty() || !entry->subject.isEmpty());
+        if (occupied)
+            revealSerial(form, auth);
+        if (!takeAuth(auth, piv, occupied, m_selectedSerial, problem, request))
+            return;
+        request.action = PivAction::ImportKey;
+        request.slot = id;
+        request.outputPath = path->text();
+        request.filePassword = password->isEnabled() ? password->text() : QString();
+        request.pinPolicy = pinPolicy->currentData().toString();
+        request.touchPolicy = touchPolicy->currentData().toString();
+        dialog.accept();
+    });
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    wipeAuth(auth);
+    wipeEdit(password);
+    if (!accepted) {
+        wipePiv(request);
+        return;
+    }
+    startPiv(request, QStringLiteral("Der Schlüssel wird in den Slot gelegt. Falls der Key blinkt, jetzt berühren."));
+}
+
 void MainWindow::importPivCertClicked()
 {
     if (!m_pivWriteReady || m_client->busy())
@@ -4432,8 +5493,7 @@ void MainWindow::signPivCertClicked()
             problem->setText(QStringLiteral("In diesem Slot liegt kein Schlüssel."));
             return;
         }
-        if (entry->keyType.contains(QLatin1String("X25519"), Qt::CaseInsensitive)
-            || entry->keyType.contains(QLatin1String("ML-KEM"), Qt::CaseInsensitive)) {
+        if (!pivSigns(entry->keyType)) {
             problem->setText(QStringLiteral("Dieser Schlüssel kann kein Zertifikat unterschreiben."));
             return;
         }
@@ -4979,6 +6039,8 @@ QString openPgpFailureText(const QString &detail)
         return QStringLiteral("Der neue Wert erfüllt die Komplexitätsregel nicht.");
     if (text.contains(QLatin1String("pin length")) || text.contains(QLatin1String("must be in the range")))
         return QStringLiteral("Die Länge passt nicht zu OpenPGP.");
+    if (text.contains(QLatin1String("no such command")) || text.contains(QLatin1String("no such option")))
+        return QStringLiteral("Dieses ykman kennt keinen OpenPGP-Reset.");
     if (text.contains(QLatin1String("aborted")))
         return QStringLiteral("Abgebrochen.");
     if (detail.trimmed().isEmpty())
@@ -5010,6 +6072,7 @@ void MainWindow::showOpenPgp(const OpenPgpRecord &record)
         m_openPgpPinReady = false;
         m_openPgpAdminReady = false;
         m_openPgpTouchReady = false;
+        m_openPgpResetReady = false;
         applyOpenPgpActions(m_client->busy());
         return;
     }
@@ -5044,6 +6107,7 @@ void MainWindow::showOpenPgp(const OpenPgpRecord &record)
     m_openPgpPinReady = record.pinAttempts > 0;
     m_openPgpAdminReady = record.adminAttempts > 0;
     m_openPgpTouchReady = m_openPgpAdminReady && !record.keys.isEmpty();
+    m_openPgpResetReady = record.pinAttempts >= 0 || !record.version.isEmpty();
     applyOpenPgpActions(m_client->busy());
 }
 
@@ -5056,6 +6120,7 @@ void MainWindow::applyOpenPgpActions(bool busy)
     m_setOpenPgpReset->setEnabled(!busy && m_openPgpAdminReady);
     m_setOpenPgpSignature->setEnabled(!busy && m_openPgpAdminReady);
     m_setOpenPgpTouch->setEnabled(!busy && m_openPgpTouchReady);
+    m_resetOpenPgp->setEnabled(!busy && m_openPgpResetReady);
 }
 
 void MainWindow::changeOpenPgpPinClicked()
@@ -5172,6 +6237,23 @@ void MainWindow::setOpenPgpTouchClicked()
     startOpenPgp(request, QStringLiteral("Die Berührung wird geändert. Falls der Key blinkt, jetzt berühren."));
 }
 
+void MainWindow::resetOpenPgpClicked()
+{
+    if (!m_openPgpResetReady || m_client->busy() || m_selectedSerial.isEmpty())
+        return;
+    if (!confirmSerial(this, m_selectedSerial, QStringLiteral("OpenPGP zurücksetzen"),
+                       QStringLiteral("Alle OpenPGP-Schlüssel und Zertifikate werden gelöscht. "
+                                      "Benutzer-PIN, Admin-PIN und Reset-Code kehren auf die Werkseinstellung zurück. "
+                                      "Der Beglaubigungsschlüssel bleibt. "
+                                      "OTP, OATH, FIDO und PIV bleiben. "
+                                      "Zum Bestätigen die Seriennummer eintippen."),
+                       QStringLiteral("Zurücksetzen")))
+        return;
+    OpenPgpRequest request;
+    request.action = OpenPgpAction::Reset;
+    startOpenPgp(request, QStringLiteral("OpenPGP wird zurückgesetzt."));
+}
+
 void MainWindow::startOpenPgp(OpenPgpRequest request, const QString &status)
 {
     setBusy(true);
@@ -5193,6 +6275,8 @@ void MainWindow::finishOpenPgp(bool ok, int action, const QString &detail)
         m_pendingStatus = QStringLiteral("Die Signatur-PIN wurde geändert.");
     else if (kind == OpenPgpAction::SetTouch)
         m_pendingStatus = QStringLiteral("Die Berührung wurde geändert.");
+    else if (kind == OpenPgpAction::Reset)
+        m_pendingStatus = QStringLiteral("OpenPGP wurde auf die Werkseinstellung gesetzt. Der Beglaubigungsschlüssel bleibt.");
     else
         m_pendingStatus = QStringLiteral("Die Benutzer-PIN wurde geändert.");
     refresh();

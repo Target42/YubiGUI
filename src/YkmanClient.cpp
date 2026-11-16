@@ -318,6 +318,8 @@ FidoRecord parseFido(const QString &text)
         line = line.trimmed();
         if (line.contains(QLatin1String("Factory reset is blocked"), Qt::CaseInsensitive))
             fido.resetBlocked = true;
+        if (line.contains(QLatin1String("must be changed"), Qt::CaseInsensitive))
+            fido.forcePinChange = true;
         const int colon = line.indexOf(QLatin1Char(':'));
         if (colon <= 0)
             continue;
@@ -1000,6 +1002,99 @@ private:
     bool m_elevated;
 };
 
+class FidoConfigWorker : public QThread
+{
+public:
+    FidoConfigWorker(YkmanClient *client, QString program, QString helper, QString serial,
+                     FidoConfigRequest request, bool elevated)
+        : m_client(client)
+        , m_program(std::move(program))
+        , m_helper(std::move(helper))
+        , m_serial(std::move(serial))
+        , m_request(std::move(request))
+        , m_elevated(elevated)
+    {
+    }
+
+    void run() override
+    {
+        QStringList args{QStringLiteral("--color"), QStringLiteral("never"),
+                         QStringLiteral("--device"), m_serial, QStringLiteral("fido")};
+        int timeout = 60000;
+        switch (m_request.action) {
+        case FidoConfigAction::ToggleAlwaysUv:
+            args << QStringLiteral("config") << QStringLiteral("toggle-always-uv");
+            break;
+        case FidoConfigAction::SetMinLength:
+            args << QStringLiteral("access") << QStringLiteral("set-min-length")
+                 << QString::number(m_request.length);
+            break;
+        case FidoConfigAction::ForceChange:
+            args << QStringLiteral("access") << QStringLiteral("force-change");
+            break;
+        case FidoConfigAction::FingerprintsList:
+            args << QStringLiteral("fingerprints") << QStringLiteral("list");
+            break;
+        case FidoConfigAction::FingerprintsAdd:
+            args << QStringLiteral("fingerprints") << QStringLiteral("add") << m_request.name;
+            timeout = 180000;
+            break;
+        case FidoConfigAction::FingerprintsRename:
+            args << QStringLiteral("fingerprints") << QStringLiteral("rename")
+                 << m_request.templateId << m_request.name;
+            break;
+        case FidoConfigAction::FingerprintsDelete:
+            args << QStringLiteral("fingerprints") << QStringLiteral("delete")
+                 << QStringLiteral("--force") << m_request.templateId;
+            break;
+        }
+        QStringList lines;
+        QStringList hints;
+        if (!m_request.pin.isEmpty()) {
+            lines << m_request.pin;
+            hints << QStringLiteral("PIN");
+        }
+
+#ifdef Q_OS_WIN
+        const ConsoleResult result = m_elevated
+                                         ? runElevatedConsole(m_helper, m_program, args, lines)
+                                         : runOnConsole(m_program, args, lines, timeout, QString(),
+                                                        QStringLiteral("ykman"), hints);
+#else
+        Q_UNUSED(m_helper);
+        Q_UNUSED(m_elevated);
+        const ConsoleResult result = runOnConsole(m_program, args, lines, timeout, QString(),
+                                                  QStringLiteral("ykman"), hints);
+#endif
+        for (QString &line : lines)
+            wipeSecret(line);
+        wipeSecret(m_request.pin);
+        wipeSecret(m_request.name);
+
+        const bool ok = result.failure.isEmpty() && result.exitCode == 0;
+        QString output = result.output;
+        QString detail = ok ? QString() : (result.failure.isEmpty() ? output : result.failure);
+        const int action = int(m_request.action);
+        QMetaObject::invokeMethod(m_client, [client = m_client, ok, action, detail, output]() mutable {
+            client->deliverFidoConfig(ok, action, detail, output);
+            output.fill(QLatin1Char('0'));
+            output.clear();
+            detail.fill(QLatin1Char('0'));
+            detail.clear();
+        }, Qt::QueuedConnection);
+        wipeSecret(output);
+        wipeSecret(detail);
+    }
+
+private:
+    YkmanClient *m_client;
+    QString m_program;
+    QString m_helper;
+    QString m_serial;
+    FidoConfigRequest m_request;
+    bool m_elevated;
+};
+
 QString revealOtp(const QString &output)
 {
     QStringList rows;
@@ -1342,6 +1437,27 @@ public:
                  << QStringLiteral("-F") << QStringLiteral("pem")
                  << m_request.slot << keyOut;
             break;
+        case PivAction::ExportCert:
+            args << QStringLiteral("piv") << QStringLiteral("certificates") << QStringLiteral("export")
+                 << QStringLiteral("-F")
+                 << (m_request.format == QLatin1String("der") ? QStringLiteral("der") : QStringLiteral("pem"))
+                 << m_request.slot << m_request.outputPath;
+            break;
+        case PivAction::ImportKey:
+            timeout = 180000;
+            args << QStringLiteral("piv") << QStringLiteral("keys") << QStringLiteral("import")
+                 << QStringLiteral("--pin-policy") << m_request.pinPolicy
+                 << QStringLiteral("--touch-policy") << m_request.touchPolicy
+                 << m_request.slot << m_request.outputPath;
+            lines = consoleLines();
+            break;
+        case PivAction::RequestCert:
+            timeout = 180000;
+            args << QStringLiteral("piv") << QStringLiteral("certificates") << QStringLiteral("request")
+                 << QStringLiteral("--subject") << m_request.subject
+                 << m_request.slot << m_request.inputPath << m_request.outputPath;
+            lines = consoleLines();
+            break;
         case PivAction::ImportCert:
             args << QStringLiteral("piv") << QStringLiteral("certificates") << QStringLiteral("import")
                  << m_request.slot << m_request.outputPath;
@@ -1420,8 +1536,13 @@ public:
     QStringList consoleLines() const
     {
         QStringList lines;
+        if (m_request.action == PivAction::RequestCert) {
+            lines << m_request.pin;
+            return lines;
+        }
         const bool askCurrentKey = !m_request.managementDefault && !m_request.managementStored;
-        if (m_request.action == PivAction::ImportCert && !m_request.filePassword.isEmpty())
+        if ((m_request.action == PivAction::ImportCert || m_request.action == PivAction::ImportKey)
+            && !m_request.filePassword.isEmpty())
             lines << m_request.filePassword;
         if (m_request.action == PivAction::ChangeManagement) {
             if (askCurrentKey)
@@ -1486,6 +1607,9 @@ public:
             args << QStringLiteral("openpgp") << QStringLiteral("keys") << QStringLiteral("set-touch")
                  << m_request.key << m_request.policy << QStringLiteral("--force");
             lines << m_request.admin;
+            break;
+        case OpenPgpAction::Reset:
+            args << QStringLiteral("openpgp") << QStringLiteral("reset") << QStringLiteral("--force");
             break;
         }
 
@@ -1689,6 +1813,49 @@ void YkmanClient::runFidoCredentials(const QString &serial, FidoCredentialAction
     worker->start();
 }
 
+void YkmanClient::deliverFidoConfig(bool ok, int action, const QString &detail, const QString &output)
+{
+    m_busy = false;
+    m_pinThread = nullptr;
+    emit fidoConfigFinished(ok, action, detail, output);
+}
+
+void YkmanClient::runFidoConfig(const QString &serial, const FidoConfigRequest &request, bool elevated)
+{
+    const bool named = request.action == FidoConfigAction::FingerprintsAdd
+                       || request.action == FidoConfigAction::FingerprintsRename;
+    const bool idOk = QRegularExpression(QStringLiteral("^[0-9a-fA-F]+$")).match(request.templateId).hasMatch()
+                      && request.templateId.size() % 2 == 0;
+    const bool needsId = request.action == FidoConfigAction::FingerprintsRename
+                         || request.action == FidoConfigAction::FingerprintsDelete;
+    const int nameBytes = request.name.toUtf8().size();
+    const bool nameOk = !request.name.isEmpty() && nameBytes <= 15
+                        && !request.name.startsWith(QLatin1Char('-'))
+                        && !request.name.contains(QLatin1Char('\n'))
+                        && !request.name.contains(QLatin1Char('\r'));
+    if (m_busy || serial.isEmpty()
+        || (request.action == FidoConfigAction::SetMinLength && (request.length < 4 || request.length > 63))
+        || (named && !nameOk) || (needsId && !idOk)) {
+        emit fidoConfigFinished(false, int(request.action),
+                                QStringLiteral("Die FIDO-Einstellung wurde nicht geändert."), QString());
+        return;
+    }
+
+    if (m_snapshot.program.isEmpty())
+        m_snapshot.program = locateProgram();
+    if (m_snapshot.program.isEmpty()) {
+        emit fidoConfigFinished(false, int(request.action), missingProgramMessage(), QString());
+        return;
+    }
+
+    m_busy = true;
+    auto *worker = new FidoConfigWorker(this, m_snapshot.program, QCoreApplication::applicationFilePath(),
+                                        serial, request, elevated);
+    m_pinThread = worker;
+    connect(worker, &QThread::finished, worker, &QObject::deleteLater);
+    worker->start();
+}
+
 void YkmanClient::deliverOtp(bool ok, const QString &detail, const QString &revealed)
 {
     m_busy = false;
@@ -1774,20 +1941,27 @@ void YkmanClient::runPiv(const QString &serial, const PivRequest &request)
 {
     const bool pair = request.action == PivAction::ChangePin || request.action == PivAction::ChangePuk
                       || request.action == PivAction::UnblockPin;
-    const bool needsPin = request.action == PivAction::GenerateKey || request.action == PivAction::ImportCert
-                          || request.action == PivAction::GenerateCert || request.action == PivAction::DeleteCert
+    const bool needsPin = request.action == PivAction::GenerateKey || request.action == PivAction::ImportKey
+                          || request.action == PivAction::ImportCert || request.action == PivAction::GenerateCert
+                          || request.action == PivAction::RequestCert || request.action == PivAction::DeleteCert
                           || (request.action == PivAction::ChangeManagement
                               && (request.managementStored || request.protectManagement));
-    const bool needsSlot = request.action == PivAction::GenerateKey || request.action == PivAction::ImportCert
-                           || request.action == PivAction::GenerateCert || request.action == PivAction::DeleteCert
-                           || request.action == PivAction::ExportKey;
-    const bool needsFile = request.action == PivAction::GenerateKey || request.action == PivAction::ImportCert
-                           || request.action == PivAction::ExportKey;
+    const bool needsSlot = request.action == PivAction::GenerateKey || request.action == PivAction::ImportKey
+                           || request.action == PivAction::ImportCert || request.action == PivAction::GenerateCert
+                           || request.action == PivAction::RequestCert || request.action == PivAction::DeleteCert
+                           || request.action == PivAction::ExportKey || request.action == PivAction::ExportCert;
+    const bool needsFile = request.action == PivAction::GenerateKey || request.action == PivAction::ImportKey
+                           || request.action == PivAction::ImportCert || request.action == PivAction::ExportKey
+                           || request.action == PivAction::ExportCert || request.action == PivAction::RequestCert;
     if (m_busy || serial.isEmpty() || (pair && (request.current.isEmpty() || request.next.isEmpty()))
         || (needsPin && request.pin.isEmpty()) || (needsSlot && request.slot.isEmpty())
         || (needsFile && request.outputPath.isEmpty())
         || (request.action == PivAction::GenerateKey && request.algorithm.isEmpty())
         || (request.action == PivAction::GenerateCert && request.subject.isEmpty())
+        || (request.action == PivAction::RequestCert
+            && (request.subject.isEmpty() || request.inputPath.isEmpty()))
+        || (request.action == PivAction::ImportKey
+            && (request.pinPolicy.isEmpty() || request.touchPolicy.isEmpty()))
         || (request.action == PivAction::ChangeManagement && request.algorithm.isEmpty())
         || (request.action == PivAction::ChangeManagement && !request.generateManagement
             && request.newManagementKey.isEmpty())

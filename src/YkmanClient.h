@@ -54,6 +54,7 @@ struct FidoRecord
     QString fingerprints;
     bool pinSet = false;
     bool resetBlocked = false;
+    bool forcePinChange = false;
     int attemptsRemaining = -1;
     int minPinLength = -1;
 };
@@ -136,12 +137,15 @@ enum class PivAction
     ChangePuk,
     UnblockPin,
     GenerateKey,
+    ImportKey,
     ImportCert,
     GenerateCert,
+    RequestCert,
     DeleteCert,
     ChangeManagement,
     Reset,
-    ExportKey
+    ExportKey,
+    ExportCert
 };
 
 struct PivRequest
@@ -158,6 +162,7 @@ struct PivRequest
     QString pinPolicy;
     QString touchPolicy;
     QString outputPath;
+    QString inputPath;
     QString format;
     QString comment;
     QString subject;
@@ -196,7 +201,8 @@ enum class OpenPgpAction
     ChangeAdmin,
     SetResetCode,
     SetSignature,
-    SetTouch
+    SetTouch,
+    Reset
 };
 
 struct OpenPgpRequest
@@ -221,6 +227,26 @@ enum class FidoCredentialAction
 {
     List,
     Delete
+};
+
+enum class FidoConfigAction
+{
+    ToggleAlwaysUv,
+    SetMinLength,
+    ForceChange,
+    FingerprintsList,
+    FingerprintsAdd,
+    FingerprintsRename,
+    FingerprintsDelete
+};
+
+struct FidoConfigRequest
+{
+    FidoConfigAction action = FidoConfigAction::ToggleAlwaysUv;
+    QString pin;
+    QString name;
+    QString templateId;
+    int length = 0;
 };
 
 struct YkmanSnapshot
@@ -292,6 +318,8 @@ public:
     void runFidoCredentials(const QString &serial, FidoCredentialAction action, const QString &pin,
                             const QString &credentialId, bool elevated);
     void deliverFidoCredentials(bool ok, int action, const QString &detail, const QString &output);
+    void runFidoConfig(const QString &serial, const FidoConfigRequest &request, bool elevated);
+    void deliverFidoConfig(bool ok, int action, const QString &detail, const QString &output);
     void runOtp(const QString &serial, const OtpRequest &request);
     void deliverOtp(bool ok, const QString &detail, const QString &revealed);
     void runOath(const QString &serial, const OathRequest &request);
@@ -317,6 +345,7 @@ signals:
     void fidoPinFinished(bool ok, const QString &detail);
     void fidoResetFinished(bool ok, const QString &detail);
     void fidoCredentialsFinished(bool ok, int action, const QString &detail, const QString &output);
+    void fidoConfigFinished(bool ok, int action, const QString &detail, const QString &output);
     void otpFinished(bool ok, const QString &detail, const QString &revealed);
     void oathFinished(bool ok, int action, const QString &detail, const QString &output);
     void pivFinished(bool ok, int action, const QString &detail);

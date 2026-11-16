@@ -11,7 +11,7 @@ Die Bilder weiter unten zeigen Beispieldaten. Es ist kein echter Key zu sehen.
 ## Voraussetzungen
 
 - Qt 6 mit dem Modul Widgets. Gebaut wird mit qmake, nicht mit CMake.
-- `ykman` 6. Die Fassung 5 kennt die Option `--color` nicht, die YubiGUI verwendet. Der Pfad lässt sich im Fenster unter **ykman** festlegen. Ohne eigenen Pfad sucht das Programm über `PATH` und, unter Windows, im Installationsordner des YubiKey Manager CLI.
+- `ykman` 6. Die Fassung 5 kennt die Option `--color` nicht, die YubiGUI verwendet. Die Fassung 6 liegt bei den [Veröffentlichungen von yubikey-manager](https://github.com/Yubico/yubikey-manager/releases/tag/6.0.0-beta.0). Unter Windows ist das der Installer `yubikey-manager-…-win64.msi`. Der Pfad lässt sich im Fenster unter **ykman** festlegen. Ohne eigenen Pfad sucht das Programm über `PATH` und, unter Windows, im Installationsordner des YubiKey Manager CLI.
 - Unter Linux für PIV, OATH und OpenPGP der Dienst `pcscd` und die udev-Regeln von `yubikey-manager`. OTP und FIDO gehen über HID und brauchen `pcscd` nicht. Fehlt etwas, bietet die Schaltfläche **Pakete** die Befehle zum Kopieren an.
 - Für einen SSH-Schlüssel auf dem FIDO-Modul `ssh-keygen`. Unter Windows ist das der optionale OpenSSH-Client.
 
@@ -68,9 +68,13 @@ Programmieren kann Yubico OTP, Challenge-Response, ein statisches Passwort oder 
 
 ### FIDO
 
-Status des FIDO2-Moduls: ob ein PIN gesetzt ist, wie viele Versuche bleiben, die Mindestlänge, discoverable Credentials und der freie Speicher. Der PIN geht an die Standardeingabe von `ykman` und nie als `--pin` auf die Befehlszeile. Unter Windows kann genau dieser Aufruf eine erhöhte Sitzung brauchen. Die übrige Oberfläche bleibt ohne Erhöhung.
+Status des FIDO2-Moduls: ob ein PIN gesetzt ist, wie viele Versuche bleiben, die Mindestlänge, ob die Nutzerprüfung immer verlangt ist, discoverable Credentials und der freie Speicher. Hat der Key einen Sensor, steht dort auch die Zahl der Fingerabdrücke. Der PIN geht an die Standardeingabe von `ykman` und nie als `--pin` auf die Befehlszeile. Unter Windows kann genau dieser Aufruf eine erhöhte Sitzung brauchen. Die übrige Oberfläche bleibt ohne Erhöhung.
+
+**Mindestlänge** lässt sich nur erhöhen. Kürzer geht nur über einen FIDO-Reset, und der löscht die Anmeldedaten. Dafür muss die Seriennummer eingetippt werden. **PIN erzwingen** sperrt den bisherigen PIN, bis er geändert wird. **Prüfung umschalten** schaltet Always-UV um: danach verlangt jede FIDO-Anmeldung den PIN oder einen Fingerabdruck, auch wenn der Dienst das nicht verlangt. Auf einem FIPS-Key lässt sich das nicht wieder ausschalten.
 
 Auffindbare Anmeldedaten erscheinen erst nach dem PIN. Löschen gilt für einen Eintrag und verlangt die Seriennummer. Ein SSH-Schlüssel legt auf dem Rechner nur eine Stub-Datei und den öffentlichen Schlüssel an. Der private Schlüssel bleibt auf dem YubiKey. **Stubs holen** schreibt residente Schlüssel neu.
+
+Hat der Key einen Fingerabdrucksensor, listet die Seite die gespeicherten Abdrücke erst nach dem PIN. Hinzufügen legt den Finger mehrfach auf den Sensor. Umbenennen und Löschen gelten für einen Abdruck. Löschen verlangt die Seriennummer.
 
 **FIDO zurücksetzen** löscht die FIDO2- und U2F-Anmeldedaten. Dafür muss die Seriennummer eingetippt werden. Danach wartet `ykman` auf Abziehen, Wiedereinstecken und die Berührung.
 
@@ -86,9 +90,9 @@ Ein OATH-Passwort geht an die Konsole von `ykman`. YubiGUI speichert es nicht au
 
 Versuche für PIN und PUK, der Management-Key und die Zertifikate in den Slots. PIN, PUK und Management-Key gehen an die Konsole von `ykman`. Ein Fehlversuch verbraucht einen Versuch. Ist die PIN gesperrt, entsperrt sie nur noch der PUK. Ist der PUK aufgebraucht, bleibt die PIV-Anwendung gesperrt.
 
-Schlüssel erzeugen, Zertifikat importieren oder selbst signieren, Zertifikat löschen und den Management-Key wechseln fragen vorher. Ein belegter Slot, der Management-Key und der Reset verlangen die Seriennummer. Export schreibt nur den öffentlichen Schlüssel, als PEM oder OpenSSH. Eine Stub-Datei legt PIV nicht an. Ein erzeugter Management-Key wird einmal angezeigt.
+Schlüssel erzeugen oder importieren, Zertifikat importieren, selbst signieren oder als Anfrage für eine CA schreiben, Zertifikat löschen und den Management-Key wechseln fragen vorher. Ein belegter Slot, der Management-Key und der Reset verlangen die Seriennummer. Export schreibt den öffentlichen Schlüssel als PEM oder OpenSSH und das Zertifikat als PEM oder DER. Den privaten Schlüssel gibt der Key nicht heraus. Ein importierter privater Schlüssel bleibt zusätzlich in der Datei auf dem Rechner. Eine Stub-Datei legt PIV nicht an. Ein erzeugter Management-Key wird einmal angezeigt.
 
-Werkseinstellungen kennzeichnet die Übersicht, sobald `ykman` sie ausweist. Die Felder werden nicht mit den Werkswerten gefüllt.
+Werkseinstellungen kennzeichnet die Übersicht, sobald `ykman` sie ausweist. Die Felder werden nicht mit den Werkswerten gefüllt. Die PIV-Biometrie erscheint nur, wenn der Key sie hat. `ykman` zeigt sie an und hat keinen Befehl zum Anlegen oder Löschen.
 
 ![PIV mit Beispieldaten](docs/bilder/piv.png)
 
@@ -97,6 +101,8 @@ Werkseinstellungen kennzeichnet die Übersicht, sobald `ykman` sie ausweist. Die
 Version, Versuche, Signatur-PIN, KDF und je Schlüssel Fingerabdruck und Berührung. Benutzer-PIN, Admin-PIN, Reset-Code, Signatur-PIN und die Berührung gehen an die Konsole von `ykman`. Eine feste Berührung verlangt die Seriennummer, weil sie sich später nicht wieder lockern lässt.
 
 Ist die Benutzer-PIN gesperrt, nimmt `ykman` den Admin-PIN zum Entsperren nur als Argument. YubiGUI schickt ihn deshalb nicht. Schlüssel erzeugen bleibt bei GnuPG. YubiGUI verwaltet die Karte und wird kein zweites GnuPG.
+
+**OpenPGP zurücksetzen** löscht die Schlüssel und Zertifikate der Karte und setzt Benutzer-PIN, Admin-PIN und Reset-Code auf die Werkseinstellung. Der Beglaubigungsschlüssel bleibt. Dafür muss die Seriennummer eingetippt werden. OTP, OATH, FIDO und PIV bleiben. Der Reset braucht keinen PIN.
 
 ## Was die Oberfläche nicht tut
 
@@ -116,10 +122,13 @@ Der Pfad zu `ykman` liegt im Konfigurationsordner des Benutzers, über `QStandar
 
 ## Projekt
 
+YubiGUI steht unter der MIT-Lizenz. Der Text liegt in `LICENSE`. Die Qt-Laufzeit in den Paketen bleibt unter der LGPLv3.
+
 ```text
 YubiGUI.pro    qmake
 src/           Qt Widgets
 docs/bilder/   Bilder dieser README, mit Beispieldaten
+LICENSE        MIT-Lizenz
 ```
 
 `build/` gehört nicht ins Repository. Die `.gitignore` lässt ihn draußen, zusammen mit den Benutzerdateien von Qt Creator.

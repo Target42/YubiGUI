@@ -35,6 +35,7 @@ VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}.0
 MinVersion=10.0
 InfoBeforeFile=hinweis.txt
+LicenseFile=..\..\LICENSE
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
