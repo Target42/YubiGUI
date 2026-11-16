@@ -29,7 +29,7 @@ TARGET = yubigui
 TEMPLATE = app
 
 # Versionsnummer der Dateiinfo. Die Paketskripte übergeben VERSION.
-isEmpty(VERSION): VERSION = 0.1.0
+isEmpty(VERSION): VERSION = 0.1.1
 DEFINES += YUBIGUI_VERSION=\\\"$$VERSION\\\"
 
 win32 {
@@ -50,5 +50,8 @@ HEADERS += \
     src/YkmanClient.h \
     src/Settings.h \
     src/ConsoleProcess.h
+
+RESOURCES += resources.qrc
+win32: RC_ICONS = packaging/icons/yubigui.ico
 
 unix: LIBS += -lutil

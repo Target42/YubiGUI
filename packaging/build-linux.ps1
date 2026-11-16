@@ -7,10 +7,16 @@ $Version = (Get-Content -Raw -Path (Join-Path $Root 'packaging\VERSION')).Trim()
 $Build = Join-Path $Root 'build\linux'
 $Dist = Join-Path $Root 'dist'
 
-$sh = Join-Path $Root 'packaging\build-linux.sh'
-$text = [IO.File]::ReadAllText($sh) -replace "`r`n", "`n" -replace "`r", "`n"
 $utf8 = New-Object System.Text.UTF8Encoding $false
-[IO.File]::WriteAllText($sh, $text, $utf8)
+foreach ($script in @(
+    (Join-Path $Root 'packaging\build-linux.sh'),
+    (Join-Path $Root 'packaging\linux\postinstall.sh'),
+    (Join-Path $Root 'packaging\linux\postremove.sh'),
+    (Join-Path $Root 'packaging\linux\yubigui.desktop')
+)) {
+    $text = [IO.File]::ReadAllText($script) -replace "`r`n", "`n" -replace "`r", "`n"
+    [IO.File]::WriteAllText($script, $text, $utf8)
+}
 
 # Docker schreibt Hinweise auf stderr. Unter Windows PowerShell würde das den Lauf abbrechen.
 $ErrorActionPreference = 'Continue'
@@ -29,6 +35,18 @@ if ($depends.Count -eq 0) { throw 'depends.txt ist leer.' }
 
 $dependLines = ($depends | ForEach-Object { '  - "' + ($_ -replace '"', '') + '"' }) -join "`n"
 $desktop = '../../packaging/linux/yubigui.desktop' -replace '\\', '/'
+$iconRoot = Join-Path $Root 'packaging\icons\hicolor'
+$iconLines = foreach ($file in (Get-ChildItem -Path $iconRoot -Recurse -File)) {
+    $rel = $file.FullName.Substring($iconRoot.Length).TrimStart('\', '/') -replace '\\', '/'
+    @"
+  - src: ../../packaging/icons/hicolor/$rel
+    dst: /usr/share/icons/hicolor/$rel
+    file_info:
+      mode: 0644
+"@
+}
+$iconBlock = $iconLines -join "`n"
+if (-not $iconBlock) { throw 'Keine Icon-Dateien unter packaging/icons/hicolor.' }
 $yaml = @"
 name: yubigui
 arch: amd64
@@ -65,6 +83,10 @@ contents:
     dst: /usr/share/doc/yubigui/LICENSE
     file_info:
       mode: 0644
+$iconBlock
+scripts:
+  postinstall: ../../packaging/linux/postinstall.sh
+  postremove: ../../packaging/linux/postremove.sh
 "@
 
 New-Item -ItemType Directory -Force -Path $Build | Out-Null

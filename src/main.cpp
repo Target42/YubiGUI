@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QFont>
 #include <QFontDatabase>
+#include <QIcon>
 #include <QPalette>
 #include <QStyle>
 #include <QStyleFactory>
@@ -56,7 +57,7 @@ QLabel#brand {
     background: transparent;
     font-size: 15px;
     font-weight: 600;
-    padding: 18px 16px 4px 18px;
+    padding: 0;
 }
 QListWidget#pages {
     background: transparent;
@@ -258,6 +259,8 @@ int main(int argc, char *argv[])
     QApplication::setApplicationName(QStringLiteral("yubigui"));
     QApplication::setApplicationDisplayName(QStringLiteral("YubiGUI"));
     QApplication::setApplicationVersion(QStringLiteral(YUBIGUI_VERSION));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/yubigui.png")));
+    QApplication::setDesktopFileName(QStringLiteral("yubigui"));
     applyAppearance();
 
     MainWindow window;

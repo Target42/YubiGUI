@@ -1981,12 +1981,21 @@ MainWindow::MainWindow(QWidget *parent)
     nav->setObjectName(QStringLiteral("nav"));
     nav->setAttribute(Qt::WA_StyledBackground, true);
     nav->setFixedWidth(188);
+    auto *brandRow = new QWidget;
+    auto *brandLayout = new QHBoxLayout(brandRow);
+    brandLayout->setContentsMargins(16, 16, 14, 8);
+    brandLayout->setSpacing(10);
+    auto *mark = new QLabel;
+    mark->setPixmap(QIcon(QStringLiteral(":/yubigui.png")).pixmap(26, 26));
+    mark->setFixedSize(26, 26);
     auto *brand = new QLabel(QStringLiteral("YubiGUI"));
     brand->setObjectName(QStringLiteral("brand"));
+    brandLayout->addWidget(mark, 0, Qt::AlignVCenter);
+    brandLayout->addWidget(brand, 1, Qt::AlignVCenter);
     auto *navLayout = new QVBoxLayout(nav);
     navLayout->setContentsMargins(0, 0, 0, 0);
     navLayout->setSpacing(0);
-    navLayout->addWidget(brand);
+    navLayout->addWidget(brandRow);
     navLayout->addWidget(m_pages, 1);
 
     auto *right = new QVBoxLayout;
