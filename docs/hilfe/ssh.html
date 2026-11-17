@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSH-Schlüssel – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page here" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>SSH-Schlüssel</h1>
+      <p>Der Knopf <strong>SSH-Schlüssel</strong> steht auf der <a href="fido.html">FIDO-Seite</a>, in der Zeile unter <strong>Anmeldedaten</strong>. Er startet <code>ssh-keygen</code>. YubiGUI spricht den Key dafür nicht selbst an. Der private Schlüssel bleibt auf dem YubiKey. Auf dem Rechner entstehen zwei Dateien: die Stub-Datei und daneben der öffentliche Schlüssel mit der Endung <code>.pub</code>.</p>
+      <figure>
+        <img class="shot" src="bilder/ssh.png" alt="Dialog SSH-Schlüssel mit Algorithmus, Anwendung ssh:, Stub-Datei, den beiden Häkchen und dem FIDO-PIN">
+        <figcaption>Dialog zum Anlegen. Der Pfad ist ein Beispiel. Erzeugen legt den Schlüssel erst an, Abbrechen verwirft die Eingabe.</figcaption>
+      </figure>
+      <p>Der Knopf ist bedienbar, wenn ein FIDO-PIN gesetzt ist, noch Versuche übrig sind, der PIN nicht erst geändert werden muss, und <code>ssh-keygen</code> gefunden wird. Unter Windows ist das der optionale OpenSSH-Client. Fehlt er, bleibt der Knopf grau.</p>
+
+      <h2>Was wo liegen bleibt</h2>
+      <p>Die Stub-Datei ist die Referenz, damit OpenSSH den Key findet. Sie enthält den privaten Schlüssel nicht. Der öffentliche Schlüssel in der <code>.pub</code>-Datei ist die Zeile, die auf den Server gehört, in <code>authorized_keys</code>. Gesichert ist der Schlüssel mit dem FIDO-PIN, nicht mit einer Passphrase der Datei.</p>
+      <p>Anmelden kann man erst, wenn diese Zeile auf dem Server steht und die Stub-Datei auf dem Rechner liegt, von dem aus die Anmeldung geht.</p>
+
+      <h2>Die Felder</h2>
+      <ul>
+        <li><strong>Algorithmus.</strong> Ed25519 schreibt <code>id_ed25519_sk</code>. ECDSA P-256 schreibt <code>id_ecdsa_sk</code>. Solange der Pfad noch der Vorschlag ist, wechselt der Dateiname mit.</li>
+        <li><strong>Anwendung.</strong> Der Text muss mit <code>ssh:</code> beginnen, darf kein Leerzeichen enthalten und höchstens 100 Zeichen lang sein. Der Vorschlag <code>ssh:</code> reicht für eine gewöhnliche Anmeldung.</li>
+        <li><strong>Kommentar.</strong> Steht mit in der <code>.pub</code>-Zeile, damit man den Schlüssel später wiedererkennt. Er darf keinen Zeilenumbruch enthalten.</li>
+        <li><strong>Stub-Datei.</strong> <strong>Datei…</strong> wählt den Ort. Liegen die Stub-Datei oder die <code>.pub</code> schon dort, bricht der Dialog ab, bevor etwas überschrieben wird.</li>
+        <li><strong>FIDO-PIN.</strong> Er geht an die Konsole von <code>ssh-keygen</code> und steht nicht in der Befehlszeile. Unter Windows kann zusätzlich ein Systemfenster nach dem PIN fragen. Danach den Key berühren. Ein falscher PIN verbraucht einen FIDO-Versuch.</li>
+      </ul>
+
+      <h2>Auf dem Key speichern</h2>
+      <p>Das Häkchen ist vorausgewählt. Dann legt <code>ssh-keygen</code> einen residenten Schlüssel an, also einen, den der Key selbst behält. Nur den holt <strong>Stubs holen</strong> später wieder. Der FIDO-PIN ist dafür nötig.</p>
+      <div class="warn">Ohne das Häkchen ist die Stub-Datei die einzige Referenz. Geht sie verloren, findet OpenSSH den Schlüssel nicht wieder, auch wenn das Geheimnis noch auf dem YubiKey liegt. Der Dialog sagt das in der Statuszeile, sobald das Erzeugen beginnt.</div>
+      <p><strong>PIN bei jeder Anmeldung</strong> verlangt den FIDO-PIN auch dann, wenn der Dienst das nicht tut. OpenSSH ruft das <code>verify-required</code>.</p>
+
+      <h2>Stubs holen</h2>
+      <p><strong>Stubs holen</strong> steht neben <strong>SSH-Schlüssel</strong>. <code>ssh-keygen</code> liest die auf dem Key gespeicherten SSH-Schlüssel und schreibt Stub-Datei und öffentlichen Schlüssel in den gewählten Ordner. Der private Schlüssel bleibt auf dem YubiKey. Der FIDO-PIN geht wieder an die Konsole. Das gilt für residente Schlüssel. Eine Stub-Datei, die nie auf dem Key gespeichert wurde, kommt so nicht zurück.</p>
+    </main>
+  </div>
+</body>
+</html>

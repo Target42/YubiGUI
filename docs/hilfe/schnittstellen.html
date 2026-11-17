@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Schnittstellen – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page here" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>Schnittstellen</h1>
+      <p>Dieselben Anwendungen wie in der Übersicht, hier als Schalter. <strong>Übernehmen</strong> schreibt die Änderung. Vorher zeigt das Fenster, was ein- und ausgeschaltet wird.</p>
+      <figure>
+        <img class="shot" src="../bilder/schnittstellen.png" alt="Schalter für USB und NFC und der Knopf Übernehmen">
+        <figcaption>Schalter für USB und NFC, mit Beispieldaten.</figcaption>
+      </figure>
+      <p>Ein schon gesetzter Lock-Code wird abgefragt. Einen neuen Lock-Code legt YubiGUI nicht an.</p>
+      <p>Ändert sich eine USB-Schnittstelle, verbindet sich der Key kurz neu. Eine reine NFC-Änderung lässt die Verbindung stehen. Hat der Key kein NFC, gelten die Schalter für USB. Liegt er auf einem Lesegerät, wird über diese Verbindung geschrieben. Eine USB-Änderung gilt dann beim nächsten Einstecken.</p>
+    </main>
+  </div>
+</body>
+</html>

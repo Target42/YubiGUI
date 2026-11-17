@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenPGP – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page here" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>OpenPGP</h1>
+      <p>Die Seite zeigt Version, Anwendung, die übrigen Versuche für Benutzer-PIN, Reset-Code und Admin-PIN, die Signatur-PIN, ob KDF an ist, und die Schlüssel mit Fingerabdruck und Berührung. YubiGUI erzeugt hier keine Schlüssel und lädt keine hoch. Schlüssel entstehen in GnuPG. YubiGUI verwaltet danach die Karte.</p>
+
+      <h2>Welche Schlüssel auf die Karte gehören</h2>
+      <p>Auf den YubiKey kommen die Unterschlüssel, die der Hauptschlüssel signiert hat. Das sind in der Tabelle <strong>Signatur</strong>, <strong>Entschlüsselung</strong> und <strong>Authentisierung</strong>. Der Hauptschlüssel selbst bleibt außerhalb des Keys. Er beglaubigt die Benutzerkennung und die Unterschlüssel. Geht der YubiKey verloren oder setzt man OpenPGP zurück, bleibt damit die Möglichkeit, neue Unterschlüssel zu signieren und alte zu widerrufen.</p>
+      <p>In GnuPG legt man genau diese Unterschlüssel mit <code>keytocard</code> auf die Karte. Ein Schlüssel ohne Signatur des Hauptschlüssels gehört nicht dorthin, und der Hauptschlüssel selbst auch nicht. Danach zeigt YubiGUI Fingerabdruck und Berührung. Erzeugen, Verschieben und das Signieren der Unterschlüssel bleiben bei GnuPG.</p>
+      <div class="note">Die Zeile <strong>Beglaubigung</strong> in der Tabelle ist der Attestierungsschlüssel von Yubico. Das ist nicht der Hauptschlüssel aus GnuPG. <strong>OpenPGP zurücksetzen</strong> löscht die Schlüssel und Zertifikate der Karte. Dieser Beglaubigungsschlüssel bleibt liegen.</div>
+
+      <h2>Die Knöpfe</h2>
+      <p>Benutzer-PIN, Admin-PIN, Reset-Code, Signatur-PIN und die Berührung gehen an die Konsole von <code>ykman</code> und stehen nicht in der Befehlszeile. Ein Fehlversuch verbraucht einen Versuch. Ohne KDF braucht die Benutzer-PIN 6 bis 127 Zeichen, Admin-PIN und Reset-Code 8 bis 127. Mit KDF darf der Wert nicht leer sein und höchstens 127 Zeichen haben.</p>
+      <ul>
+        <li><strong>Benutzer-PIN</strong> ändert die PIN für den täglichen Gebrauch: Signieren, Entschlüsseln, Authentisieren.</li>
+        <li><strong>Admin-PIN</strong> ändert die PIN für die Verwaltung der Karte.</li>
+        <li><strong>Reset-Code</strong> setzt einen Code, mit dem sich die Benutzer-PIN zurücksetzen lässt. Steht die Anzeige auf 0, ist keiner gesetzt oder er ist gesperrt.</li>
+        <li><strong>Signatur-PIN</strong> wählt, wann die Benutzer-PIN beim Signieren verlangt wird: <strong>Einmal</strong> je Sitzung oder <strong>Immer</strong>. Dafür braucht es den Admin-PIN.</li>
+        <li><strong>Berührung</strong> gilt für einen Schlüssel der Tabelle. <strong>Aus</strong> verlangt keine Berührung, <strong>An</strong> verlangt sie jedes Mal, <strong>Kurz merken</strong> hält die Freigabe eine Weile. <strong>Fest</strong> und <strong>Fest, kurz merken</strong> lassen sich später nicht wieder lockern. Dafür muss die Seriennummer eingetippt werden. Der Admin-PIN geht in jedem Fall an die Konsole.</li>
+      </ul>
+      <p>Ist die Benutzer-PIN gesperrt, nimmt <code>ykman</code> den Admin-PIN dafür nur als Argument. YubiGUI schickt ihn deshalb nicht.</p>
+
+      <h2>Zurücksetzen</h2>
+      <p><strong>OpenPGP zurücksetzen</strong> löscht die Schlüssel und Zertifikate der Karte und setzt Benutzer-PIN, Admin-PIN und Reset-Code auf die Werkseinstellung. Der Beglaubigungsschlüssel von Yubico bleibt. OTP, OATH, FIDO und PIV bleiben. Der Reset braucht keinen PIN. Er verlangt die Seriennummer. Die Unterschlüssel auf der Karte sind danach weg. Der Hauptschlüssel, der nie auf der Karte lag, ist davon nicht betroffen.</p>
+    </main>
+  </div>
+</body>
+</html>

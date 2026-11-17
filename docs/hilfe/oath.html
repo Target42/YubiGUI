@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OATH – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page here" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>OATH</h1>
+      <p>Die Seite listet die Konten auf dem Key: Name, Art (TOTP oder HOTP), Periode und, erst auf Wunsch, den Code. Codes erscheinen nur kurz. Sie landen nicht von selbst in der Zwischenablage.</p>
+      <figure>
+        <img class="shot" src="../bilder/oath.png" alt="OATH-Konten mit Art, Periode und der Zeile der Knöpfe">
+        <figcaption>OATH-Konten mit Beispieldaten.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>Codes</strong> berechnet die Codes der Konten. <strong>Diesen Code</strong> gilt für die gewählte Zeile.</li>
+        <li><strong>Kopieren</strong> legt einen Code erst auf ausdrücklichen Druck in die Zwischenablage.</li>
+        <li><strong>Anlegen</strong> nimmt eine <code>otpauth://</code>-Adresse.</li>
+        <li><strong>Umbenennen</strong> ändert den Namen eines Kontos.</li>
+        <li><strong>Löschen</strong> entfernt ein Konto und verlangt die Seriennummer.</li>
+        <li><strong>Passwort</strong> setzt oder ändert ein OATH-Passwort. Es geht an die Konsole von <code>ykman</code>. YubiGUI speichert es nicht auf dem Rechner und bietet das Merken durch <code>ykman</code> nicht an. Steht der Knopf auf <strong>Passwort ändern</strong>, ist schon eines gesetzt.</li>
+      </ul>
+      <p>Ist die Anwendung gesperrt, öffnet derselbe Knopf den Dialog zum Entsperren.</p>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OTP – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page here" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>OTP</h1>
+      <p>Zwei Slots. Slot 1 löst eine kurze Berührung aus, Slot 2 eine lange. Sichtbar ist nur, ob ein Slot belegt ist: <strong>Programmiert</strong> oder <strong>Leer</strong>. Den gespeicherten Inhalt gibt der Key nicht heraus.</p>
+      <p>Die Zeile darunter wählt den Slot. Daneben stehen die drei Aktionen.</p>
+      <ul>
+        <li><strong>Programmieren</strong> schreibt Yubico OTP, Challenge-Response, ein statisches Passwort oder HOTP. Ein belegter Slot wird ersetzt. Dafür muss die Seriennummer eingetippt werden. Ein erzeugtes Geheimnis wird einmal angezeigt.</li>
+        <li><strong>Löschen</strong> leert den gewählten Slot und fragt vorher.</li>
+        <li><strong>Tauschen</strong> vertauscht die beiden Slots und verlangt die Seriennummer.</li>
+      </ul>
+      <h2>Was der Dialog abfragt</h2>
+      <p>Bei Yubico OTP wählt man das Tastaturlayout: Deutsch, Deutsch ohne Akzenttasten, Englisch (US) oder Modhex. Ein statisches Passwort und der HOTP-Schlüssel gehen an die Konsole von <code>ykman</code> und stehen nicht in der Befehlszeile. HOTP hat sechs oder acht Stellen.</p>
+      <div class="warn">Programmieren, Löschen und Tauschen fragen vorher. Ein belegter Slot und das Tauschen lassen sich nur mit der eingetippten Seriennummer bestätigen.</div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Übersicht – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page here" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>Übersicht</h1>
+      <p>Die Übersicht listet die Anwendungen auf dem Key. Ein Häkchen heißt eingeschaltet, ein Kreuz ausgeschaltet. Das gilt für USB und, wenn der Key NFC hat, auch für NFC. Der Inhalt einer Anwendung steht auf ihrer eigenen Seite.</p>
+      <figure>
+        <img class="shot" src="../bilder/uebersicht.png" alt="Übersicht mit den Anwendungen des Keys, Häkchen für ein und Kreuz für aus">
+        <figcaption>Übersicht mit Beispieldaten.</figcaption>
+      </figure>
+      <p>YubiHSM Auth erscheint nur als Zeile. Diese Anwendung wird nicht bedient. Die Schalter zum Ändern stehen unter <a href="schnittstellen.html">Schnittstellen</a>.</p>
+      <p>Liegt der Key auf einem Lesegerät, steht unter Verbindung <strong>Lesegerät</strong>. Fehlt der Key, wartet das Fenster und bittet, ihn einzustecken oder auf das Lesegerät zu legen. Mehrere Keys wählt man über die Seriennummer. Es wird immer genau ein Gerät bearbeitet.</p>
+    </main>
+  </div>
+</body>
+</html>

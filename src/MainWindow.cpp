@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QComboBox>
 #include <QGuiApplication>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEventLoop>
@@ -41,6 +42,7 @@
 #include <QStyle>
 #include <QTableWidget>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 namespace {
@@ -2133,6 +2135,67 @@ MainWindow::MainWindow(QWidget *parent)
     refresh();
 }
 
+namespace {
+
+QString locateHelpIndex()
+{
+    const QString leaf = QStringLiteral("index.html");
+    const QString beside = QDir(QCoreApplication::applicationDirPath())
+                               .filePath(QStringLiteral("hilfe/%1").arg(leaf));
+    if (QFileInfo::exists(beside))
+        return beside;
+
+    const QString shared = QStringLiteral("/usr/share/yubigui/hilfe/%1").arg(leaf);
+    if (QFileInfo::exists(shared))
+        return shared;
+
+    QDir dir(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 6; ++i) {
+        const QString candidate = dir.filePath(QStringLiteral("docs/hilfe/%1").arg(leaf));
+        if (QFileInfo::exists(candidate))
+            return candidate;
+        if (!dir.cdUp())
+            break;
+    }
+    return {};
+}
+
+QString helpDocument(int row)
+{
+    const QString index = locateHelpIndex();
+    if (index.isEmpty())
+        return {};
+    QString name = QStringLiteral("index.html");
+    switch (row) {
+    case 0: name = QStringLiteral("uebersicht.html"); break;
+    case 1: name = QStringLiteral("schnittstellen.html"); break;
+    case 2: name = QStringLiteral("otp.html"); break;
+    case 3: name = QStringLiteral("fido.html"); break;
+    case 4: name = QStringLiteral("oath.html"); break;
+    case 5: name = QStringLiteral("piv.html"); break;
+    case 6: name = QStringLiteral("openpgp.html"); break;
+    default: break;
+    }
+    const QString page = QFileInfo(index).dir().filePath(name);
+    return QFileInfo::exists(page) ? page : index;
+}
+
+void openDetailedHelp(QWidget *parent, int row)
+{
+    const QString file = helpDocument(row);
+    if (file.isEmpty()) {
+        QMessageBox::warning(parent, QStringLiteral("Hilfe"),
+                             QStringLiteral("Die ausführliche Hilfe wurde nicht gefunden."));
+        return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(file))) {
+        QMessageBox::warning(parent, QStringLiteral("Hilfe"),
+                             QStringLiteral("Die ausführliche Hilfe lässt sich nicht öffnen."));
+    }
+}
+
+} // namespace
+
 void MainWindow::showHelp()
 {
     const int row = m_pages->currentRow();
@@ -2155,8 +2218,13 @@ void MainWindow::showHelp()
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close);
     buttons->button(QDialogButtonBox::Close)->setText(QStringLiteral("Schließen"));
+    auto *guide = buttons->addButton(QStringLiteral("Ausführliche Hilfe"), QDialogButtonBox::ActionRole);
+    guide->setCursor(Qt::PointingHandCursor);
     layout->addWidget(buttons);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(guide, &QPushButton::clicked, &dialog, [row, &dialog]() {
+        openDetailedHelp(&dialog, row);
+    });
     dialog.adjustSize();
     dialog.exec();
 }

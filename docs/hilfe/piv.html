@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PIV – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page here" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>PIV</h1>
+      <p>Oben stehen Version, die übrigen Versuche für PIN und PUK, der Management-Key und, wenn der Key sie hat, die Biometrie. <code>ykman</code> zeigt die Biometrie an und hat keinen Befehl zum Anlegen oder Löschen. Die Tabelle listet die Slots mit Subject und Ablaufdatum.</p>
+      <figure>
+        <img class="shot" src="../bilder/piv.png" alt="PIV-Seite mit PIN, PUK, Management-Key und den Zertifikats-Slots">
+        <figcaption>PIV mit Beispieldaten.</figcaption>
+      </figure>
+      <p>Die Slots heißen <strong>9a Authentisierung</strong>, <strong>9c Signatur</strong>, <strong>9d Schlüsselverwaltung</strong> und <strong>9e Kartenauthentisierung</strong>. PIN, PUK und Management-Key gehen an die Konsole von <code>ykman</code>. Ein Fehlversuch verbraucht einen Versuch. Ist die PIN gesperrt, entsperrt sie nur noch der PUK. Ist der PUK aufgebraucht, bleibt die PIV-Anwendung gesperrt, bis ein Reset sie leert.</p>
+      <h2>PIN und PUK</h2>
+      <ul>
+        <li><strong>PIN ändern</strong> und <strong>PUK ändern</strong> setzen einen neuen Wert. Der Dialog nennt die übrigen Versuche.</li>
+        <li><strong>PIN entsperren</strong> nimmt den PUK, wenn die PIN gesperrt ist.</li>
+      </ul>
+      <h2>Schlüssel und Zertifikat</h2>
+      <ul>
+        <li><strong>Schlüssel erzeugen</strong> legt ein Schlüsselpaar im Slot an. Algorithmen sind ECC P-256, ECC P-384, RSA 2048, 3072 und 4096, Ed25519 und X25519. Die PIN-Regel ist Voreinstellung, einmal je Sitzung, jedes Mal oder nie. Die Berührung ist Voreinstellung, nie, immer oder kurz merken.</li>
+        <li><strong>Schlüssel importieren</strong> legt einen vorhandenen privaten Schlüssel in einen Slot. Die Datei bleibt auf dem Rechner. Eine Stub-Datei legt PIV nicht an. OpenSSH spricht den Slot später über PKCS#11 an.</li>
+        <li><strong>Öffentlichen Schlüssel</strong> schreibt PEM oder OpenSSH. Den privaten Schlüssel gibt der Key nicht heraus.</li>
+        <li><strong>Zertifikat exportieren</strong> schreibt PEM oder DER. <strong>Zertifikat importieren</strong> legt ein vorhandenes Zertifikat in den Slot. <strong>Zertifikatsanfrage</strong> schreibt eine Anfrage für eine CA. <strong>Selbst signieren</strong> stellt ein Zertifikat aus dem Schlüssel im Slot aus.</li>
+        <li><strong>Zertifikat löschen</strong> entfernt das Zertifikat des gewählten Slots.</li>
+      </ul>
+      <p>Ein belegter Slot verlangt die Seriennummer. Werkseinstellungen kennzeichnet die Übersicht, sobald <code>ykman</code> sie ausweist. Die Felder werden nicht mit den Werkswerten gefüllt.</p>
+      <h2>Management-Key und Reset</h2>
+      <p><strong>Management-Key</strong> wechselt den Schlüssel, mit dem die PIV-Verwaltung geschützt ist. Ein erzeugter Wert wird einmal angezeigt. Der Wechsel verlangt die Seriennummer.</p>
+      <p><strong>PIV zurücksetzen</strong> leert die PIV-Anwendung und verlangt die Seriennummer. Der Reset ist gesperrt, solange FIDO eingerichtet ist.</p>
+    </main>
+  </div>
+</body>
+</html>

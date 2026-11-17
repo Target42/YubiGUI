@@ -47,6 +47,24 @@ $iconLines = foreach ($file in (Get-ChildItem -Path $iconRoot -Recurse -File)) {
 }
 $iconBlock = $iconLines -join "`n"
 if (-not $iconBlock) { throw 'Keine Icon-Dateien unter packaging/icons/hicolor.' }
+
+function Stage-DocLines([string]$repoRel, [string]$dstDir) {
+    $abs = Join-Path $Root $repoRel
+    $lines = foreach ($file in (Get-ChildItem -Path $abs -Recurse -File)) {
+        $rel = $file.FullName.Substring($abs.Length).TrimStart('\', '/') -replace '\\', '/'
+        $src = '../../' + (($repoRel -replace '\\', '/') + '/' + $rel)
+        @"
+  - src: $src
+    dst: $dstDir/$rel
+    file_info:
+      mode: 0644
+"@
+    }
+    return ($lines -join "`n")
+}
+$helpBlock = Stage-DocLines 'docs\hilfe' '/usr/share/yubigui/hilfe'
+$pictureBlock = Stage-DocLines 'docs\bilder' '/usr/share/yubigui/bilder'
+if (-not $helpBlock -or -not $pictureBlock) { throw 'Die Hilfedateien fehlen unter docs/.' }
 $yaml = @"
 name: yubigui
 arch: amd64
@@ -83,6 +101,8 @@ contents:
     dst: /usr/share/doc/yubigui/LICENSE
     file_info:
       mode: 0644
+$helpBlock
+$pictureBlock
 $iconBlock
 scripts:
   postinstall: ../../packaging/linux/postinstall.sh

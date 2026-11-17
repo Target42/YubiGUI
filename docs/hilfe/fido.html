@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIDO – Hilfe zu YubiGUI</title>
+  <link rel="stylesheet" href="hilfe.css">
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <a class="brand" href="index.html">YubiGUI</a>
+      <a class="page" href="index.html">Hilfe</a>
+      <a class="page" href="uebersicht.html">Übersicht</a>
+      <a class="page" href="schnittstellen.html">Schnittstellen</a>
+      <a class="page" href="otp.html">OTP</a>
+      <a class="page here" href="fido.html">FIDO</a>
+      <a class="page" href="ssh.html">SSH-Schlüssel</a>
+      <a class="page" href="oath.html">OATH</a>
+      <a class="page" href="piv.html">PIV</a>
+      <a class="page" href="openpgp.html">OpenPGP</a>
+    </nav>
+    <main>
+      <h1>FIDO</h1>
+      <p>Die Seite zeigt den Status des FIDO2-Moduls: AAGUID, ob ein PIN gesetzt ist, wie viele Versuche bleiben, die Mindestlänge, ob jede Anmeldung eine Nutzerprüfung verlangt, den freien Speicher und, wenn der Key einen Sensor hat, die Zahl der Fingerabdrücke.</p>
+      <figure>
+        <img class="shot" src="bilder/fido.png" alt="FIDO-Seite mit PIN-Status, den Knöpfen für PIN und Prüfung und den Knöpfen SSH-Schlüssel und Stubs holen">
+        <figcaption>FIDO-Seite. Die Seriennummer im Bild ist ein Beispiel. Dieser Key hat keinen Fingerabdrucksensor, deshalb fehlt der Abschnitt dafür.</figcaption>
+      </figure>
+      <h2>PIN und Prüfung</h2>
+      <ul>
+        <li><strong>PIN ändern</strong> oder <strong>PIN setzen</strong>. Der PIN geht an die Konsole von <code>ykman</code>. Unter Windows kann genau dieser Aufruf eine erhöhte Sitzung brauchen. Die übrige Oberfläche bleibt ohne Erhöhung.</li>
+        <li><strong>Mindestlänge</strong> lässt sich nur erhöhen. Kürzer geht nur über einen FIDO-Reset, und der löscht die Anmeldedaten. Dafür muss die Seriennummer eingetippt werden.</li>
+        <li><strong>PIN erzwingen</strong> sperrt den bisherigen PIN, bis er geändert wird. Bis dahin sind die übrigen FIDO-Aktionen gesperrt.</li>
+        <li><strong>Prüfung umschalten</strong> schaltet die dauernde Nutzerprüfung um. Danach verlangt jede FIDO-Anmeldung den PIN oder einen Fingerabdruck, auch wenn der Dienst das nicht verlangt. Auf einem FIPS-Key lässt sich das nicht wieder ausschalten. Der Knopf erscheint, wenn der Key das kann.</li>
+      </ul>
+      <div class="warn">Ein Fehlversuch verbraucht einen Versuch. Ist nur noch einer übrig, sagt das der Dialog, bevor etwas abgeschickt wird. Sind die Versuche aufgebraucht, hilft nur ein FIDO-Reset, und der löscht die Anmeldedaten.</div>
+      <h2>Anmeldedaten</h2>
+      <p><strong>Anmeldedaten</strong> liest die auffindbaren Einträge erst nach dem PIN. Die Tabelle zeigt Dienst, Benutzer, Anzeigename und Kennung. <strong>Anmeldedaten löschen</strong> gilt für einen gewählten Eintrag und verlangt die Seriennummer.</p>
+      <p><strong>SSH-Schlüssel</strong> und <strong>Stubs holen</strong> sitzen in derselben Zeile. Beide bleiben grau, solange kein FIDO-PIN gesetzt ist, der PIN geändert werden muss oder <code>ssh-keygen</code> fehlt. Unter Windows ist das der optionale OpenSSH-Client. Der Ablauf steht auf der Seite <a href="ssh.html">SSH-Schlüssel</a>.</p>
+      <h2>Fingerabdrücke</h2>
+      <p>Hat der Key einen Sensor, erscheint darunter der Abschnitt <strong>Gespeicherte Fingerabdrücke</strong>. Die Liste kommt erst nach dem PIN. <strong>Hinzufügen</strong> legt den Finger mehrfach auf den Sensor. <strong>Umbenennen</strong> und <strong>Löschen</strong> gelten für einen Abdruck. Löschen verlangt die Seriennummer.</p>
+      <h2>Zurücksetzen</h2>
+      <p><strong>FIDO zurücksetzen</strong> löscht die FIDO2- und U2F-Anmeldedaten und setzt den PIN zurück. Dafür muss die Seriennummer eingetippt werden. Danach wartet <code>ykman</code> auf Abziehen, Wiedereinstecken und die Berührung. OTP, OATH, PIV und OpenPGP bleiben. Der Reset ist gesperrt, solange PIV eingerichtet ist, weil ein vollständiger Werksreset den ganzen Key leeren würde.</p>
+      <p>Blinkt der Key, wartet das Fenster auf die Berührung. Der Abbruch beendet den <code>ykman</code>-Prozess, damit ein hängender Touch den Key nicht blockiert. Liegt der Key auf einem Lesegerät, die Anmeldedaten per USB lesen. Die Freigabe vom Auflegen ist schnell verbraucht.</p>
+    </main>
+  </div>
+</body>
+</html>

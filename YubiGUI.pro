@@ -29,7 +29,7 @@ TARGET = yubigui
 TEMPLATE = app
 
 # Versionsnummer der Dateiinfo. Die Paketskripte übergeben VERSION.
-isEmpty(VERSION): VERSION = 0.1.1
+isEmpty(VERSION): VERSION = 0.1.2
 DEFINES += YUBIGUI_VERSION=\\\"$$VERSION\\\"
 
 win32 {
