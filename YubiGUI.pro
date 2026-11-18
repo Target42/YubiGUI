@@ -16,7 +16,7 @@
 #   ~/Qt/6.9.1/gcc_64/bin/qmake ../YubiGUI.pro
 #   make
 
-QT += widgets
+QT += widgets network
 
 CONFIG += c++17 warn_on
 CONFIG -= app_bundle
@@ -29,7 +29,7 @@ TARGET = yubigui
 TEMPLATE = app
 
 # Versionsnummer der Dateiinfo. Die Paketskripte übergeben VERSION.
-isEmpty(VERSION): VERSION = 0.1.3
+isEmpty(VERSION): VERSION = 0.1.4
 DEFINES += YUBIGUI_VERSION=\\\"$$VERSION\\\"
 
 win32 {
@@ -43,13 +43,15 @@ SOURCES += \
     src/MainWindow.cpp \
     src/YkmanClient.cpp \
     src/Settings.cpp \
-    src/ConsoleProcess.cpp
+    src/ConsoleProcess.cpp \
+    src/HelpServer.cpp
 
 HEADERS += \
     src/MainWindow.h \
     src/YkmanClient.h \
     src/Settings.h \
-    src/ConsoleProcess.h
+    src/ConsoleProcess.h \
+    src/HelpServer.h
 
 RESOURCES += resources.qrc
 win32: RC_ICONS = packaging/icons/yubigui.ico

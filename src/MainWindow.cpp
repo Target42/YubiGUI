@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "HelpServer.h"
 #include "Settings.h"
 
 #include <QApplication>
@@ -2180,64 +2181,10 @@ QString helpDocument(int row)
     return QFileInfo::exists(page) ? page : index;
 }
 
-bool copyHelpTree(const QString &source, const QString &destination)
+HelpServer *helpServer()
 {
-    const QDir origin(source);
-    if (!origin.exists())
-        return false;
-    if (!QDir().mkpath(destination))
-        return false;
-    const QFileInfoList entries = origin.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
-    for (const QFileInfo &entry : entries) {
-        const QString target = QDir(destination).filePath(entry.fileName());
-        if (entry.isDir()) {
-            if (!copyHelpTree(entry.absoluteFilePath(), target))
-                return false;
-        } else {
-            QFile::remove(target);
-            if (!QFile::copy(entry.absoluteFilePath(), target))
-                return false;
-        }
-    }
-    return true;
-}
-
-// Snap-Firefox darf /usr/share nicht lesen und meldet die Datei dann als fehlend.
-// Liegt die Hilfe außerhalb des Home-Verzeichnisses, wird sie nach
-// ~/.local/share/yubigui kopiert; dort kann der Browser sie öffnen.
-QString helpFileForBrowser(const QString &file)
-{
-#ifndef Q_OS_LINUX
-    return file;
-#else
-    const QString home = QDir::homePath();
-    const QString canonical = QFileInfo(file).canonicalFilePath();
-    if (canonical.isEmpty())
-        return {};
-    if (canonical.startsWith(home + QLatin1Char('/')))
-        return canonical;
-
-    const QFileInfo page(canonical);
-    const QString stageRoot = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (stageRoot.isEmpty())
-        return {};
-
-    const QString stagedHelp = QDir(stageRoot).filePath(QStringLiteral("hilfe"));
-    QDir(stagedHelp).removeRecursively();
-    if (!copyHelpTree(page.dir().absolutePath(), stagedHelp))
-        return {};
-
-    const QString pictures = QFileInfo(page.dir().absolutePath()).dir().filePath(QStringLiteral("bilder"));
-    if (QFileInfo::exists(pictures)) {
-        const QString stagedPictures = QDir(stageRoot).filePath(QStringLiteral("bilder"));
-        QDir(stagedPictures).removeRecursively();
-        if (!copyHelpTree(pictures, stagedPictures))
-            return {};
-    }
-
-    const QString stagedPage = QDir(stagedHelp).filePath(page.fileName());
-    return QFileInfo::exists(stagedPage) ? stagedPage : QString();
-#endif
+    static auto *server = new HelpServer(QCoreApplication::instance());
+    return server;
 }
 
 void openDetailedHelp(QWidget *parent, int row)
@@ -2248,8 +2195,9 @@ void openDetailedHelp(QWidget *parent, int row)
                              QStringLiteral("Die ausführliche Hilfe wurde nicht gefunden."));
         return;
     }
-    const QString file = helpFileForBrowser(located);
-    if (file.isEmpty() || !QDesktopServices::openUrl(QUrl::fromLocalFile(file))) {
+    const QString docRoot = QFileInfo(QFileInfo(located).absolutePath()).dir().absolutePath();
+    const QUrl url = helpServer()->serve(docRoot) ? helpServer()->urlForFile(located) : QUrl();
+    if (!url.isValid() || !QDesktopServices::openUrl(url)) {
         QMessageBox::warning(parent, QStringLiteral("Hilfe"),
                              QStringLiteral("Die ausführliche Hilfe lässt sich nicht öffnen."));
     }
