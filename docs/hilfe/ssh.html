@@ -36,7 +36,7 @@
       <h2>Die Felder</h2>
       <ul>
         <li><strong>Algorithmus.</strong> Ed25519 schreibt <code>id_ed25519_sk</code>. ECDSA P-256 schreibt <code>id_ecdsa_sk</code>. Solange der Pfad noch der Vorschlag ist, wechselt der Dateiname mit.</li>
-        <li><strong>Anwendung.</strong> Der Text muss mit <code>ssh:</code> beginnen, darf kein Leerzeichen enthalten und höchstens 100 Zeichen lang sein. Der Vorschlag <code>ssh:</code> reicht für eine gewöhnliche Anmeldung.</li>
+        <li><strong>Anwendung.</strong> Vor dem Feld steht fest <code>ssh:</code>. Der Rest ist optional, darf kein Leerzeichen enthalten und ergibt zusammen mit <code>ssh:</code> höchstens 100 Zeichen. Leer lassen reicht für eine gewöhnliche Anmeldung. Ein Zusatz wie <code>github</code> wird zu <code>ssh:github</code>.</li>
         <li><strong>Kommentar.</strong> Steht mit in der <code>.pub</code>-Zeile, damit man den Schlüssel später wiedererkennt. Er darf keinen Zeilenumbruch enthalten.</li>
         <li><strong>Stub-Datei.</strong> <strong>Datei…</strong> wählt den Ort. Liegen die Stub-Datei oder die <code>.pub</code> schon dort, bricht der Dialog ab, bevor etwas überschrieben wird.</li>
         <li><strong>FIDO-PIN.</strong> Er geht an die Konsole von <code>ssh-keygen</code> und steht nicht in der Befehlszeile. Unter Windows kann zusätzlich ein Systemfenster nach dem PIN fragen. Danach den Key berühren. Ein falscher PIN verbraucht einen FIDO-Versuch.</li>

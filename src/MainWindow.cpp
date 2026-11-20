@@ -3450,7 +3450,8 @@ void MainWindow::generateSshClicked()
     auto *algorithm = new QComboBox;
     algorithm->addItem(QStringLiteral("Ed25519"), QStringLiteral("ed25519-sk"));
     algorithm->addItem(QStringLiteral("ECDSA P-256"), QStringLiteral("ecdsa-sk"));
-    auto *application = new QLineEdit(QStringLiteral("ssh:"));
+    auto *application = new QLineEdit;
+    application->setPlaceholderText(QStringLiteral("optional"));
     auto *comment = new QLineEdit;
     auto *resident = new QCheckBox(QStringLiteral("Auf dem Key speichern"));
     resident->setChecked(true);
@@ -3483,9 +3484,14 @@ void MainWindow::generateSshClicked()
     fileRow->addWidget(browse);
     auto *pin = new QLineEdit;
     pin->setEchoMode(QLineEdit::Password);
+    auto *applicationPrefix = new QLabel(QStringLiteral("ssh:"));
+    auto *applicationRow = new QHBoxLayout;
+    applicationRow->setContentsMargins(0, 0, 0, 0);
+    applicationRow->addWidget(applicationPrefix);
+    applicationRow->addWidget(application, 1);
     auto *form = new QFormLayout;
     form->addRow(QStringLiteral("Algorithmus"), algorithm);
-    form->addRow(QStringLiteral("Anwendung"), application);
+    form->addRow(QStringLiteral("Anwendung"), applicationRow);
     form->addRow(QStringLiteral("Kommentar"), comment);
     form->addRow(QStringLiteral("Stub-Datei"), fileRow);
     form->addRow(QString(), resident);
@@ -3502,10 +3508,12 @@ void MainWindow::generateSshClicked()
     SshRequest request;
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, [&]() {
-        const QString app = application->text().trimmed();
-        if (!app.startsWith(QLatin1String("ssh:")) || app.contains(QLatin1Char(' ')) || !sshLineOk(app)
-            || app.size() > 100) {
-            problem->setText(QStringLiteral("Die Anwendung muss mit ssh: beginnen und darf kein Leerzeichen enthalten."));
+        QString suffix = application->text().trimmed();
+        if (suffix.startsWith(QLatin1String("ssh:")))
+            suffix.remove(0, 4);
+        const QString app = QStringLiteral("ssh:") + suffix;
+        if (suffix.contains(QLatin1Char(' ')) || !sshLineOk(suffix) || app.size() > 100) {
+            problem->setText(QStringLiteral("Hinter ssh: darf kein Leerzeichen stehen, und der Text darf nicht zu lang sein."));
             return;
         }
         if (!sshLineOk(comment->text()) || comment->text().size() > 200) {
